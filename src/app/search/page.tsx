@@ -1,7 +1,6 @@
 import { ModeBanner } from "@/components/mode-banner";
 import { SearchFilters } from "@/components/search-filters";
 import { SearchResults } from "@/components/search-results";
-import { SiteHeader } from "@/components/site-header";
 import { searchYoutube } from "@/lib/youtube/client";
 import type { SearchType } from "@/lib/youtube/types";
 
@@ -35,7 +34,6 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 
   return (
     <>
-      <SiteHeader initialQuery={q} />
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6">
         <div className="mb-6 animate-kino-in">
           <h1 className="font-[family-name:var(--font-display)] text-3xl font-bold tracking-tight text-[color:var(--kino-ink)]">

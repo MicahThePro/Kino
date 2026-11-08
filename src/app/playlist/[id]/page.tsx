@@ -2,7 +2,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ModeBanner } from "@/components/mode-banner";
-import { SiteHeader } from "@/components/site-header";
 import { VideoGrid } from "@/components/video-grid";
 import { getPlaylistItems, getPlaylists } from "@/lib/youtube/client";
 
@@ -35,7 +34,6 @@ export default async function PlaylistPage({ params }: PlaylistPageProps) {
 
   return (
     <>
-      <SiteHeader />
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6">
         <ModeBanner
           mode={playlistResult.mode}

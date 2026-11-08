@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { DM_Sans, Syne } from "next/font/google";
+import { AppShell } from "@/components/app-shell";
 import "./globals.css";
 
 const display = Syne({
@@ -29,8 +30,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${display.variable} ${body.variable} h-full antialiased`}
     >
-      <body className="kino-grain relative min-h-full flex flex-col font-[family-name:var(--font-body)]">
-        {children}
+      <body className="kino-grain relative min-h-full bg-[color:var(--kino-bg)] font-[family-name:var(--font-body)]">
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );

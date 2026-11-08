@@ -1,5 +1,6 @@
 import type {
   ChannelItem,
+  CommentItem,
   PlaylistItem,
   SearchResult,
   SearchType,
@@ -343,4 +344,46 @@ export function demoChannelLive(channelId: string): VideoItem[] {
 
 export function demoRelated(videoId: string): VideoItem[] {
   return DEMO_VIDEOS.filter((video) => video.id !== videoId).slice(0, 8);
+}
+
+export const DEMO_SHORTS: VideoItem[] = DEMO_VIDEOS.filter((video) => video.playback === "short");
+
+export function demoShortsFeed(after?: string): VideoItem[] {
+  const shorts = DEMO_SHORTS.length > 0 ? DEMO_SHORTS : DEMO_VIDEOS.slice(0, 3);
+  if (!after) return shorts;
+  const index = shorts.findIndex((video) => video.id === after);
+  if (index === -1) return shorts;
+  return [...shorts.slice(index + 1), ...shorts.slice(0, index + 1)];
+}
+
+export const DEMO_COMMENTS: CommentItem[] = [
+  {
+    id: "demo-comment-1",
+    author: "Backup catalog",
+    text: "YouTube comments could not be loaded, so this backup thread is standing in.",
+    published: "just now",
+    likes: "0",
+    replyCount: "1",
+    replyToken: "demo-replies",
+    pinned: true,
+  },
+  {
+    id: "demo-comment-2",
+    author: "Kino",
+    text: "Long videos, Shorts, and past streams share this comments panel.",
+    published: "just now",
+    likes: "0",
+  },
+];
+
+export function demoReplies(): CommentItem[] {
+  return [
+    {
+      id: "demo-reply-1",
+      author: "Backup catalog",
+      text: "Replies land here when YouTube returns them.",
+      published: "just now",
+      likes: "0",
+    },
+  ];
 }

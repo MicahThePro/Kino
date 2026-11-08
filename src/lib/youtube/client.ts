@@ -513,6 +513,44 @@ export async function searchYoutube(
   }
 }
 
+export async function getHomeRecommendations(): Promise<
+  ApiEnvelope<VideoItem[]> & { live: VideoItem[] }
+> {
+  try {
+    const yt = await getInnertube();
+    const [popular, liveSearch] = await Promise.all([
+      yt.search("popular videos", { type: "video" }),
+      yt.search("live", { features: ["live"] }).catch(() => null),
+    ]);
+    const recommended = (popular.results ?? [])
+      .map((item) => mapVideoItem(item))
+      .filter((video): video is VideoItem => Boolean(video))
+      .filter((video) => video.playback !== "short" && video.playback !== "live");
+    const live = (liveSearch?.results ?? [])
+      .map((item) => mapVideoItem(item))
+      .filter((video): video is VideoItem => Boolean(video && video.playback === "live"));
+
+    const videos = dedupeVideos([...live.slice(0, 4), ...recommended]).slice(0, MAX_RESULTS);
+    if (videos.length === 0) {
+      const demo = DEMO_VIDEOS.filter((video) => video.playback !== "short");
+      return {
+        mode: "demo",
+        data: demo,
+        live: demo.filter((video) => video.playback === "live"),
+      };
+    }
+    return { mode: "live", data: videos, live: dedupeVideos(live).slice(0, 4) };
+  } catch (error) {
+    const demo = DEMO_VIDEOS.filter((video) => video.playback !== "short");
+    return {
+      mode: "demo",
+      data: demo,
+      live: demo.filter((video) => video.playback === "live"),
+      error: error instanceof Error ? error.message : "Failed to load recommendations",
+    };
+  }
+}
+
 export async function getPopularVideos(): Promise<ApiEnvelope<VideoItem[]>> {
   try {
     const yt = await getInnertube();

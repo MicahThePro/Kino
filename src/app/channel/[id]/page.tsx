@@ -3,7 +3,6 @@ import { notFound } from "next/navigation";
 import { ChannelTabs } from "@/components/channel-tabs";
 import { ModeBanner } from "@/components/mode-banner";
 import { PlaylistCard } from "@/components/playlist-card";
-import { SiteHeader } from "@/components/site-header";
 import { VideoGrid } from "@/components/video-grid";
 import {
   getChannelLive,
@@ -56,7 +55,6 @@ export default async function ChannelPage({ params, searchParams }: ChannelPageP
 
   return (
     <>
-      <SiteHeader />
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6">
         <ModeBanner
           mode={channelResult.mode}
