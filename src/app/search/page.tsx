@@ -22,6 +22,8 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   const q = (params.q ?? "").trim();
   const type: SearchType =
     params.type === "video" ||
+    params.type === "short" ||
+    params.type === "live" ||
     params.type === "channel" ||
     params.type === "playlist"
       ? params.type
@@ -48,7 +50,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           </h1>
           {!q ? (
             <p className="mt-2 text-[color:var(--kino-muted)]">
-              Type a query in the bar above to find videos, channels, and playlists.
+              Type a query in the bar above to find videos, Shorts, livestreams, channels, and playlists.
             </p>
           ) : null}
         </div>

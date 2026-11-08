@@ -33,7 +33,7 @@ export function SearchBar({ initialQuery = "" }: { initialQuery?: string }) {
       <Input
         value={query}
         onChange={(event) => setQuery(event.target.value)}
-        placeholder="Search videos, channels, playlists"
+        placeholder="Search videos, Shorts, live, channels"
         aria-label="Search YouTube"
         className="h-11 rounded-full border-[color:var(--kino-line)] bg-white pl-10 pr-24 text-base shadow-[0_1px_0_rgba(20,16,12,0.04)] transition-[box-shadow,border-color] focus-visible:border-[color:var(--kino-accent)] focus-visible:ring-[color:var(--kino-accent)]/20"
       />

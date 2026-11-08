@@ -19,7 +19,11 @@ export async function GET(request: Request) {
   const q = (searchParams.get("q") ?? "").slice(0, 120);
   const typeParam = searchParams.get("type") ?? "all";
   const type: SearchType =
-    typeParam === "video" || typeParam === "channel" || typeParam === "playlist"
+    typeParam === "video" ||
+    typeParam === "short" ||
+    typeParam === "live" ||
+    typeParam === "channel" ||
+    typeParam === "playlist"
       ? typeParam
       : "all";
 

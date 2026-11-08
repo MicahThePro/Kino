@@ -18,7 +18,7 @@ export function formatCount(value?: string | number) {
 
 export function formatViews(value?: string | number) {
   if (value === undefined || value === null || value === "") return null;
-  if (typeof value === "string" && /view/i.test(value)) return value;
+  if (typeof value === "string" && /view|watching/i.test(value)) return value;
   const formatted = formatCount(value);
   return formatted ? `${formatted} views` : null;
 }
