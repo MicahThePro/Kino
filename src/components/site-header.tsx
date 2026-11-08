@@ -1,14 +1,22 @@
 "use client";
 
+import { Suspense } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { Clapperboard } from "lucide-react";
 import { SearchBar } from "@/components/search-bar";
 import { cn } from "@/lib/utils";
 
-export function SiteHeader({ initialQuery = "" }: { initialQuery?: string }) {
+function HeaderSearch() {
   const pathname = usePathname();
-  const compact = pathname.startsWith("/watch");
+  const params = useSearchParams();
+  const initialQuery = pathname.startsWith("/search") ? params.get("q") ?? "" : "";
+  return <SearchBar key={`${pathname}:${initialQuery}`} initialQuery={initialQuery} />;
+}
+
+export function SiteHeader() {
+  const pathname = usePathname();
+  const compact = pathname.startsWith("/watch") || pathname.startsWith("/shorts");
 
   return (
     <header
@@ -37,7 +45,9 @@ export function SiteHeader({ initialQuery = "" }: { initialQuery?: string }) {
         </Link>
 
         <div className="min-w-0 flex-1">
-          <SearchBar initialQuery={initialQuery} />
+          <Suspense fallback={<SearchBar initialQuery="" />}>
+            <HeaderSearch />
+          </Suspense>
         </div>
       </div>
     </header>

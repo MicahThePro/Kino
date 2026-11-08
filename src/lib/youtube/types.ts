@@ -45,3 +45,22 @@ export type SearchResult =
   | { kind: "playlist"; item: PlaylistItem };
 
 export type YoutubeMode = "live" | "demo";
+
+export type CommentItem = {
+  id: string;
+  author: string;
+  authorAvatar?: string;
+  text: string;
+  likes?: string;
+  published?: string;
+  replyCount?: string;
+  replyToken?: string;
+  pinned?: boolean;
+};
+
+export type CommentPage = {
+  mode: YoutubeMode;
+  comments: CommentItem[];
+  cursor?: string;
+  error?: string;
+};

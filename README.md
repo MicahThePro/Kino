@@ -8,7 +8,10 @@ Kino looks up YouTube metadata on the server and plays videos with the official 
 
 ## Features
 
-- Home feed of popular videos
+- Home recommendations that mix livestreams and long videos. Signed-out YouTube does not return a personal home feed, so this uses a popular-video search plus the live filter.
+- A Shorts button in the desktop sidebar and the mobile bottom bar. It opens a full-screen vertical feed from YouTube’s signed-out Shorts reel, one Short at a time, looping and muted until you tap for sound.
+- Comments on long videos, Shorts, and past streams, with more comments and replies when YouTube returns them. Shorts open comments in a slide-up panel.
+- Live chat on a current livestream, beside the player on desktop and under it on a phone, using YouTube’s live chat embed.
 - Search with filters for all results, videos, Shorts, live (current streams and past streams), channels, or playlists
 - Watch page with a YouTube embed, related videos, and an optional playlist sidebar
 - Vertical player for Shorts, and a LIVE label when a broadcast is still live
@@ -68,4 +71,4 @@ public/                  static SVG assets
 
 ## How it works
 
-Server pages call `src/lib/youtube/client.ts`. That module keeps one Innertube session and maps results into video, channel, and playlist objects, capped at 24 items. Shorts come from Innertube's Shorts search and each channel's Shorts tab. Livestreams come from a live search plus each channel's live tab, which includes streams that are on now and streams that already ended. The watch page embeds `https://www.youtube.com/embed/<id>` with autoplay. That same embed plays a live broadcast while it is live and a normal video afterward. Shorts are detected with the `/shorts/` URL and rendered in a 9:16 frame. The `/api/youtube/*` routes call the same functions and rate-limit by `x-forwarded-for` or `x-real-ip`. Search accepts `type=short` and `type=live`. Channel lookups accept `shorts` and `live` channel ids. When a lookup fails, the client returns the bundled catalog in `src/lib/youtube/demo-data.ts` so the page still has something to show.
+Server pages call `src/lib/youtube/client.ts`. That module keeps one Innertube session and maps results into video, channel, and playlist objects, capped at 24 items. The Shorts feed follows YouTube’s signed-out reel: a Shorts search seeds the first video, then `getShortsVideoInfo` returns the next Shorts in that reel. Home recommendations mix a popular-video search with the live filter, because the signed-out home browse is only a sign-in prompt. Comments use Innertube’s comments continuation, including another page and replies when a reply token is present. Live chat is YouTube’s `live_chat` embed so it keeps updating on Vercel. The watch page embeds `https://www.youtube.com/embed/<id>` with autoplay. That same embed plays a live broadcast while it is live and a normal video afterward. Shorts in the feed stay muted until a tap unmutes them, then loop. The `/api/youtube/*` routes call the same functions and rate-limit by `x-forwarded-for` or `x-real-ip`. When a lookup fails, the client returns the bundled catalog in `src/lib/youtube/demo-data.ts`.

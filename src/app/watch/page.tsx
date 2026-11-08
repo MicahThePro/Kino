@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { CommentsPanel } from "@/components/comments-panel";
+import { LiveChat } from "@/components/live-chat";
 import { ModeBanner } from "@/components/mode-banner";
 import { PlaybackBadge } from "@/components/playback-badge";
 import { PlayerEmbed } from "@/components/player-embed";
-import { SiteHeader } from "@/components/site-header";
 import { VideoCard } from "@/components/video-card";
 import {
   getPlaylistItems,
@@ -70,7 +71,6 @@ export default async function WatchPage({ searchParams }: WatchPageProps) {
 
   return (
     <>
-      <SiteHeader />
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 lg:py-8">
         <ModeBanner mode={videoResult.mode} error={videoResult.error} />
 
@@ -78,7 +78,9 @@ export default async function WatchPage({ searchParams }: WatchPageProps) {
           className={
             video.playback === "short"
               ? "grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,440px)_minmax(0,1fr)]"
-              : "grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_340px]"
+              : video.playback === "live"
+                ? "grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_380px]"
+                : "grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_340px]"
           }
         >
           <section className="min-w-0 space-y-4">
@@ -88,6 +90,12 @@ export default async function WatchPage({ searchParams }: WatchPageProps) {
               title={video.title}
               playback={video.playback}
             />
+
+            {video.playback === "live" ? (
+              <div className="lg:hidden">
+                <LiveChat videoId={video.id} />
+              </div>
+            ) : null}
 
             <div className="animate-kino-rise space-y-3">
               {video.playback && video.playback !== "video" ? (
@@ -117,9 +125,20 @@ export default async function WatchPage({ searchParams }: WatchPageProps) {
                 </p>
               ) : null}
             </div>
+
+            {video.playback === "short" ? (
+              <CommentsPanel videoId={video.id} variant="sheet" />
+            ) : (
+              <CommentsPanel videoId={video.id} />
+            )}
           </section>
 
           <aside className="space-y-6">
+            {video.playback === "live" ? (
+              <div className="hidden lg:block">
+                <LiveChat videoId={video.id} />
+              </div>
+            ) : null}
             {playlistId && playlistResult.data.length > 0 ? (
               <div className="space-y-3">
                 <div className="flex items-center justify-between gap-2">

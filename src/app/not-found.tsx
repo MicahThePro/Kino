@@ -1,11 +1,8 @@
 import Link from "next/link";
-import { SiteHeader } from "@/components/site-header";
 
 export default function NotFound() {
   return (
-    <>
-      <SiteHeader />
-      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-start justify-center px-4 py-20 sm:px-6">
+    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-start justify-center px-4 py-20 sm:px-6">
         <p className="text-sm font-semibold tracking-wide text-[color:var(--kino-accent)] uppercase">
           404
         </p>
@@ -21,7 +18,6 @@ export default function NotFound() {
         >
           Back home
         </Link>
-      </main>
-    </>
+    </main>
   );
 }
