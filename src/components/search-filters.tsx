@@ -7,6 +7,8 @@ import type { SearchType } from "@/lib/youtube/types";
 const FILTERS: { id: SearchType; label: string }[] = [
   { id: "all", label: "All" },
   { id: "video", label: "Videos" },
+  { id: "short", label: "Shorts" },
+  { id: "live", label: "Live" },
   { id: "channel", label: "Channels" },
   { id: "playlist", label: "Playlists" },
 ];

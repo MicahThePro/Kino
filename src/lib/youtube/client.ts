@@ -1,5 +1,7 @@
 import {
   DEMO_VIDEOS,
+  demoChannelLive,
+  demoChannelShorts,
   demoChannelVideos,
   demoGetChannels,
   demoGetPlaylists,
@@ -19,6 +21,7 @@ import {
 } from "./innertube";
 import type {
   ChannelItem,
+  Playback,
   PlaylistItem,
   SearchResult,
   SearchType,
@@ -38,10 +41,12 @@ type LooseItem = Record<string, unknown> & {
   type?: string;
   content_type?: string;
   id?: string;
+  video_id?: string;
   content_id?: string;
   title?: unknown;
   description?: unknown;
   description_snippet?: unknown;
+  is_live?: boolean;
   author?: {
     name?: string;
     id?: string;
@@ -49,6 +54,8 @@ type LooseItem = Record<string, unknown> & {
     thumbnails?: Array<{ url?: string }>;
   };
   thumbnails?: Array<{ url?: string }>;
+  thumbnail?: Array<{ url?: string }>;
+  badges?: Array<{ label?: string; style?: string }>;
   published?: unknown;
   duration?: { text?: string } | string;
   view_count?: unknown;
@@ -64,7 +71,22 @@ type LooseItem = Record<string, unknown> & {
     image?: Array<{ url?: string }>;
     primary_thumbnail?: { image?: Array<{ url?: string }> };
   };
+  thumbnail_view_model?: { image?: Array<{ url?: string }> };
+  overlay_metadata?: { primary_text?: unknown; secondary_text?: unknown };
+  on_tap_endpoint?: { payload?: { videoId?: string }; metadata?: { url?: string } };
+  endpoint?: { payload?: { videoId?: string }; metadata?: { url?: string } };
+  contents?: unknown[];
+  items?: unknown[];
 };
+
+const SHELF_TYPES = new Set([
+  "GridShelfView",
+  "ReelShelf",
+  "Shelf",
+  "HorizontalShelfView",
+  "RichShelf",
+  "OfficialCardView",
+]);
 
 function asLoose(value: unknown): LooseItem | null {
   if (!value || typeof value !== "object") return null;
@@ -72,24 +94,108 @@ function asLoose(value: unknown): LooseItem | null {
 }
 
 function itemId(item: LooseItem) {
-  return String(item.content_id || item.id || "").trim();
+  return String(
+    item.video_id ||
+      item.content_id ||
+      item.on_tap_endpoint?.payload?.videoId ||
+      item.endpoint?.payload?.videoId ||
+      item.id ||
+      "",
+  ).trim();
 }
 
 function itemTitle(item: LooseItem) {
-  return textOf(item.metadata?.title) || textOf(item.title) || "Untitled";
+  return (
+    textOf(item.metadata?.title) ||
+    textOf(item.title) ||
+    textOf(item.overlay_metadata?.primary_text) ||
+    "Untitled"
+  );
 }
 
 function itemThumb(item: LooseItem) {
   return (
+    absoluteUrl(item.thumbnail_view_model?.image?.[0]?.url) ||
     absoluteUrl(item.content_image?.primary_thumbnail?.image?.[0]?.url) ||
     absoluteUrl(item.content_image?.image?.[0]?.url) ||
     firstThumb(item.thumbnails) ||
+    firstThumb(item.thumbnail) ||
     firstThumb(item.author?.thumbnails) ||
     absoluteUrl(item.author?.best_thumbnail?.url)
   );
 }
 
-function mapVideoItem(raw: unknown): VideoItem | null {
+function badgeLabels(item: LooseItem) {
+  return (item.badges ?? [])
+    .map((badge) => badge.label || badge.style || "")
+    .filter(Boolean);
+}
+
+function playbackBlob(item: LooseItem, parts: string[]) {
+  return [
+    ...parts,
+    textOf(item.published),
+    textOf(item.overlay_metadata?.secondary_text),
+    ...badgeLabels(item),
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function durationText(item: LooseItem) {
+  const value = textOf(item.duration);
+  return value.trim();
+}
+
+function inferPlayback(item: LooseItem, parts: string[], from?: "shorts" | "live"): Playback {
+  const type = String(item.type || "");
+  const contentType = String(item.content_type || "");
+  const endpointUrl = `${item.on_tap_endpoint?.metadata?.url || ""} ${item.endpoint?.metadata?.url || ""}`;
+  if (
+    from === "shorts" ||
+    type === "ShortsLockupView" ||
+    type === "ReelItem" ||
+    contentType === "SHORT" ||
+    endpointUrl.includes("/shorts/")
+  ) {
+    return "short";
+  }
+
+  const blob = playbackBlob(item, parts);
+  const liveBadge = badgeLabels(item).some((label) => /LIVE/i.test(label));
+  if (liveBadge || /watching|started streaming/i.test(blob)) return "live";
+  if (/streamed/i.test(blob)) return "vod";
+  if (from === "live") return durationText(item) ? "vod" : "live";
+  return "video";
+}
+
+function classifyWatchCopy(published: string, relative: string): Playback {
+  const blob = `${published} ${relative}`;
+  if (/started streaming|watching/i.test(blob)) return "live";
+  if (/streamed/i.test(blob)) return "vod";
+  return "video";
+}
+
+function flattenResults(nodes: unknown[]): unknown[] {
+  const flat: unknown[] = [];
+  for (const raw of nodes) {
+    const item = asLoose(raw);
+    if (!item) continue;
+    const type = String(item.type || "");
+    const kids = item.contents ?? item.items;
+    if (SHELF_TYPES.has(type) && Array.isArray(kids) && kids.length > 0) {
+      flat.push(...flattenResults(kids));
+      continue;
+    }
+    flat.push(item);
+  }
+  return flat;
+}
+
+function mapVideoItem(
+  raw: unknown,
+  from?: "shorts" | "live",
+): VideoItem | null {
   const item = asLoose(raw);
   if (!item) return null;
 
@@ -98,10 +204,15 @@ function mapVideoItem(raw: unknown): VideoItem | null {
 
   const type = String(item.type || "");
   const contentType = String(item.content_type || "");
+  const playbackHint = inferPlayback(item, [], from);
   const looksVideo =
+    playbackHint !== "video" ||
     type === "Video" ||
     type === "Movie" ||
+    type === "ShortsLockupView" ||
+    type === "ReelItem" ||
     contentType === "VIDEO" ||
+    contentType === "SHORT" ||
     Boolean(item.duration) ||
     Boolean(item.view_count) ||
     Boolean(item.short_view_count);
@@ -115,17 +226,23 @@ function mapVideoItem(raw: unknown): VideoItem | null {
     return null;
   }
 
-  if (!looksVideo && type === "LockupView" && contentType && contentType !== "VIDEO") {
+  if (!looksVideo && type === "LockupView" && contentType && contentType !== "VIDEO" && contentType !== "SHORT") {
     return null;
   }
 
   const parts = metadataParts(item.metadata?.metadata?.metadata_rows);
+  const playback = inferPlayback(item, parts, from);
+  const watching = parts.find((part) => /watching/i.test(part));
   const viewsLabel =
+    watching ||
     textOf(item.view_count) ||
     textOf(item.short_view_count) ||
+    textOf(item.overlay_metadata?.secondary_text) ||
     pickPart(parts, /views?/i);
   const published =
-    textOf(item.published) || pickPart(parts, /(ago|Streamed|Premiered|hour|day|week|month|year)/i);
+    textOf(item.published) ||
+    pickPart(parts, /(ago|Streamed|Premiered|hour|day|week|month|year)/i);
+  const duration = durationText(item);
 
   return {
     id,
@@ -136,12 +253,13 @@ function mapVideoItem(raw: unknown): VideoItem | null {
     channelTitle:
       item.author?.name ||
       pickPart(parts, /^@|channel/i) ||
-      parts.find((part) => !/views?|ago|subscribers?/i.test(part)) ||
-      "Unknown channel",
+      parts.find((part) => !/views?|ago|subscribers?|watching/i.test(part)) ||
+      "",
     publishedAt: published,
     thumbnail: itemThumb(item) || `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
-    duration: textOf(item.duration) || undefined,
-    viewCount: digitsFromCount(viewsLabel) || viewsLabel || undefined,
+    duration: playback === "live" ? undefined : duration || undefined,
+    viewCount: watching || digitsFromCount(viewsLabel) || viewsLabel || undefined,
+    playback,
   };
 }
 
@@ -234,10 +352,18 @@ function mapPlaylistItem(raw: unknown): PlaylistItem | null {
   };
 }
 
+function videoMatchesSearch(video: VideoItem, type: SearchType) {
+  if (type === "short") return video.playback === "short";
+  if (type === "live") return video.playback === "live" || video.playback === "vod";
+  if (type === "video") return video.playback !== "short";
+  return true;
+}
+
 function mapSearchResults(rawItems: unknown[], type: SearchType): SearchResult[] {
   const results: SearchResult[] = [];
+  const seen = new Set<string>();
 
-  for (const raw of rawItems) {
+  for (const raw of flattenResults(rawItems)) {
     const item = asLoose(raw);
     if (!item) continue;
 
@@ -255,26 +381,47 @@ function mapSearchResults(rawItems: unknown[], type: SearchType): SearchResult[]
         ? mapPlaylistItem(item)
         : null;
     const asVideo =
-      kind === "Video" || kind === "Movie" || contentType === "VIDEO"
-        ? mapVideoItem(item)
+      kind === "Video" ||
+      kind === "Movie" ||
+      kind === "ShortsLockupView" ||
+      kind === "ReelItem" ||
+      contentType === "VIDEO" ||
+      contentType === "SHORT"
+        ? mapVideoItem(item, type === "short" ? "shorts" : undefined)
         : null;
 
     if ((type === "all" || type === "channel") && asChannel) {
-      results.push({ kind: "channel", item: asChannel });
+      if (!seen.has(`channel:${asChannel.id}`)) {
+        seen.add(`channel:${asChannel.id}`);
+        results.push({ kind: "channel", item: asChannel });
+      }
       continue;
     }
     if ((type === "all" || type === "playlist") && asPlaylist) {
-      results.push({ kind: "playlist", item: asPlaylist });
+      if (!seen.has(`playlist:${asPlaylist.id}`)) {
+        seen.add(`playlist:${asPlaylist.id}`);
+        results.push({ kind: "playlist", item: asPlaylist });
+      }
       continue;
     }
-    if ((type === "all" || type === "video") && asVideo) {
-      results.push({ kind: "video", item: asVideo });
+    if ((type === "all" || type === "video" || type === "short" || type === "live") && asVideo) {
+      if (videoMatchesSearch(asVideo, type) && !seen.has(`video:${asVideo.id}`)) {
+        seen.add(`video:${asVideo.id}`);
+        results.push({ kind: "video", item: asVideo });
+      }
       continue;
     }
 
-    if (type === "all" || type === "video") {
-      const fallbackVideo = mapVideoItem(item);
-      if (fallbackVideo && !asChannel && !asPlaylist) {
+    if (type === "all" || type === "video" || type === "short" || type === "live") {
+      const fallbackVideo = mapVideoItem(item, type === "short" ? "shorts" : undefined);
+      if (
+        fallbackVideo &&
+        !asChannel &&
+        !asPlaylist &&
+        videoMatchesSearch(fallbackVideo, type) &&
+        !seen.has(`video:${fallbackVideo.id}`)
+      ) {
+        seen.add(`video:${fallbackVideo.id}`);
         results.push({ kind: "video", item: fallbackVideo });
       }
     }
@@ -283,12 +430,48 @@ function mapSearchResults(rawItems: unknown[], type: SearchType): SearchResult[]
   return results.slice(0, MAX_RESULTS);
 }
 
-function searchFilter(type: SearchType): "all" | "video" | "channel" | "playlist" {
-  return type;
+function dedupeVideos(videos: VideoItem[]) {
+  const seen = new Set<string>();
+  const unique: VideoItem[] = [];
+  for (const video of videos) {
+    if (seen.has(video.id)) continue;
+    seen.add(video.id);
+    unique.push(video);
+  }
+  return unique;
 }
 
 export function getYoutubeMode(): YoutubeMode {
   return "live";
+}
+
+async function searchShorts(query: string): Promise<SearchResult[]> {
+  const yt = await getInnertube();
+  const response = await yt.search(query || "shorts", { type: "shorts" });
+  return mapSearchResults(response.results ?? [], "short");
+}
+
+async function searchLive(query: string): Promise<SearchResult[]> {
+  const yt = await getInnertube();
+  const q = query || "live";
+  const [current, archives] = await Promise.all([
+    yt.search(q, { features: ["live"] }).catch(() => null),
+    yt.search(query || "livestream", { type: "video" }).catch(() => null),
+  ]);
+
+  const liveNow = mapSearchResults(current?.results ?? [], "live").filter(
+    (result) => result.kind === "video" && result.item.playback === "live",
+  );
+  const vods = mapSearchResults(archives?.results ?? [], "live").filter(
+    (result) => result.kind === "video" && result.item.playback === "vod",
+  );
+
+  const videos = dedupeVideos([
+    ...liveNow.map((result) => (result.kind === "video" ? result.item : null)),
+    ...vods.map((result) => (result.kind === "video" ? result.item : null)),
+  ].filter((video): video is VideoItem => Boolean(video)));
+
+  return videos.slice(0, MAX_RESULTS).map((item) => ({ kind: "video" as const, item }));
 }
 
 export async function searchYoutube(
@@ -298,8 +481,23 @@ export async function searchYoutube(
   const q = query.trim();
   try {
     const yt = await getInnertube();
+    if (type === "short") {
+      const results = await searchShorts(q);
+      if (results.length === 0 && !q) {
+        return { mode: "demo", data: demoSearch("", type) };
+      }
+      return { mode: "live", data: results };
+    }
+    if (type === "live") {
+      const results = await searchLive(q);
+      if (results.length === 0 && !q) {
+        return { mode: "demo", data: demoSearch("", type) };
+      }
+      return { mode: "live", data: results };
+    }
+
     const response = await yt.search(q || "popular videos", {
-      type: searchFilter(type),
+      type: type === "all" ? "all" : type,
     });
     const results = mapSearchResults(response.results ?? [], type);
     if (results.length === 0 && !q) {
@@ -320,7 +518,7 @@ export async function getPopularVideos(): Promise<ApiEnvelope<VideoItem[]>> {
     const yt = await getInnertube();
     const response = await yt.search("popular videos", { type: "video" });
     const videos = (response.results ?? [])
-      .map(mapVideoItem)
+      .map((item) => mapVideoItem(item))
       .filter((video): video is VideoItem => Boolean(video))
       .slice(0, MAX_RESULTS);
 
@@ -359,9 +557,15 @@ export async function getVideos(ids: string): Promise<ApiEnvelope<VideoItem[]>> 
         const title = textOf(info.primary_info?.title) || "Untitled";
         const views = textOf(info.primary_info?.view_count?.view_count) ||
           textOf(info.primary_info?.view_count?.short_view_count);
+        const relative = textOf(info.primary_info?.relative_date);
+        const publishedDate = textOf(info.primary_info?.published);
+        let playback = classifyWatchCopy(publishedDate, relative);
         const published =
-          textOf(info.primary_info?.relative_date) ||
-          textOf(info.primary_info?.published);
+          playback === "live" && publishedDate
+            ? publishedDate
+            : relative && relative !== "N/A"
+              ? relative
+              : publishedDate || relative;
         const owner = info.secondary_info?.owner;
         const channelId =
           owner?.author?.id ||
@@ -369,6 +573,17 @@ export async function getVideos(ids: string): Promise<ApiEnvelope<VideoItem[]>> 
           "";
         const channelTitle = owner?.author?.name || textOf(owner?.title) || "Unknown channel";
         const description = textOf(info.secondary_info?.description);
+        if (playback === "video") {
+          try {
+            const endpoint = await yt.resolveURL(`https://www.youtube.com/shorts/${id}`);
+            const url = endpoint.metadata?.url ?? "";
+            if (url.includes("/shorts/") || endpoint.name === "reelWatchEndpoint") {
+              playback = "short";
+            }
+          } catch {
+            // A failed shorts lookup keeps the landscape player.
+          }
+        }
 
         videos.push({
           id,
@@ -379,6 +594,7 @@ export async function getVideos(ids: string): Promise<ApiEnvelope<VideoItem[]>> 
           publishedAt: published,
           thumbnail: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
           viewCount: digitsFromCount(views) || views || undefined,
+          playback,
         });
       } catch {
         const fallback = demoGetVideos([id])[0];
@@ -548,7 +764,7 @@ export async function getPlaylistItems(
     const yt = await getInnertube();
     const playlist = await yt.getPlaylist(id);
     const items = ((playlist as { items?: unknown[] }).items ?? [])
-      .map(mapVideoItem)
+      .map((item) => mapVideoItem(item))
       .filter((video): video is VideoItem => Boolean(video))
       .slice(0, MAX_RESULTS);
 
@@ -574,7 +790,7 @@ export async function getChannelUploads(
     const channel = await yt.getChannel(id);
     const tab = await channel.getVideos();
     const videos = ((tab as { videos?: unknown[] }).videos ?? [])
-      .map(mapVideoItem)
+      .map((item) => mapVideoItem(item))
       .filter((video): video is VideoItem => Boolean(video))
       .slice(0, MAX_RESULTS);
 
@@ -585,6 +801,70 @@ export async function getChannelUploads(
       data: demoChannelVideos(id),
       error:
         error instanceof Error ? error.message : "Failed to load channel videos",
+    };
+  }
+}
+
+export async function getChannelShorts(
+  channelId: string,
+): Promise<ApiEnvelope<VideoItem[]>> {
+  const id = channelId.trim();
+  if (!id) return { mode: "live", data: [] };
+
+  try {
+    const yt = await getInnertube();
+    const channel = await yt.getChannel(id);
+    if (!channel.has_shorts) return { mode: "live", data: [] };
+    const tab = await channel.getShorts();
+    const videos = (tab.videos ?? [])
+      .map((video) => mapVideoItem(video, "shorts"))
+      .filter((video): video is VideoItem => Boolean(video))
+      .slice(0, MAX_RESULTS);
+
+    return { mode: "live", data: videos };
+  } catch (error) {
+    return {
+      mode: "demo",
+      data: demoChannelShorts(id),
+      error:
+        error instanceof Error ? error.message : "Failed to load channel Shorts",
+    };
+  }
+}
+
+export async function getChannelLive(
+  channelId: string,
+): Promise<ApiEnvelope<VideoItem[]>> {
+  const id = channelId.trim();
+  if (!id) return { mode: "live", data: [] };
+
+  try {
+    const yt = await getInnertube();
+    const channel = await yt.getChannel(id);
+    if (!channel.has_live_streams) return { mode: "live", data: [] };
+    const tab = await channel.getLiveStreams();
+    const videos = dedupeVideos(
+      (tab.videos ?? [])
+        .map((video) => mapVideoItem(video, "live"))
+        .filter((video): video is VideoItem => Boolean(video)),
+    )
+      .sort((a, b) => {
+        if (a.playback === b.playback) return 0;
+        if (a.playback === "live") return -1;
+        if (b.playback === "live") return 1;
+        return 0;
+      })
+      .slice(0, MAX_RESULTS);
+
+    return { mode: "live", data: videos };
+  } catch (error) {
+    return {
+      mode: "demo",
+      data: demoChannelLive(id),
+      error:
+        error instanceof Error
+          ? error.message
+          : "Failed to load channel livestreams",
     };
   }
 }
@@ -629,7 +909,7 @@ export async function getRelatedVideos(
     const yt = await getInnertube();
     const info = await yt.getInfo(id);
     const related = ((info.watch_next_feed as unknown[]) ?? [])
-      .map(mapVideoItem)
+      .map((item) => mapVideoItem(item))
       .filter((video): video is VideoItem => video != null && video.id !== id)
       .slice(0, 12);
 

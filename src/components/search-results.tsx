@@ -1,7 +1,7 @@
 import { ChannelCard } from "@/components/channel-card";
 import { PlaylistCard } from "@/components/playlist-card";
-import { VideoCard } from "@/components/video-card";
-import type { SearchResult } from "@/lib/youtube/types";
+import { VideoGrid } from "@/components/video-grid";
+import type { SearchResult, VideoItem } from "@/lib/youtube/types";
 
 export function SearchResults({ results }: { results: SearchResult[] }) {
   if (results.length === 0) {
@@ -17,7 +17,16 @@ export function SearchResults({ results }: { results: SearchResult[] }) {
     );
   }
 
-  const videos = results.filter((result) => result.kind === "video");
+  const videos = results.flatMap((result) =>
+    result.kind === "video" ? [result.item] : [],
+  );
+  const live = videos.filter(
+    (video) => video.playback === "live" || video.playback === "vod",
+  );
+  const shorts = videos.filter((video) => video.playback === "short");
+  const regular = videos.filter(
+    (video) => !video.playback || video.playback === "video",
+  );
   const channels = results.filter((result) => result.kind === "channel");
   const playlists = results.filter((result) => result.kind === "playlist");
 
@@ -36,6 +45,18 @@ export function SearchResults({ results }: { results: SearchResult[] }) {
         </section>
       ) : null}
 
+      {live.length > 0 ? (
+        <VideoSection title="Live" videos={orderLive(live)} />
+      ) : null}
+
+      {shorts.length > 0 ? (
+        <VideoSection title="Shorts" videos={shorts} variant="shorts" />
+      ) : null}
+
+      {regular.length > 0 ? (
+        <VideoSection title="Videos" videos={regular} />
+      ) : null}
+
       {playlists.length > 0 ? (
         <section className="space-y-4">
           <h2 className="text-sm font-semibold tracking-wide text-[color:var(--kino-muted)] uppercase">
@@ -48,19 +69,34 @@ export function SearchResults({ results }: { results: SearchResult[] }) {
           </div>
         </section>
       ) : null}
-
-      {videos.length > 0 ? (
-        <section className="space-y-4">
-          <h2 className="text-sm font-semibold tracking-wide text-[color:var(--kino-muted)] uppercase">
-            Videos
-          </h2>
-          <div className="grid grid-cols-1 gap-x-5 gap-y-8 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {videos.map((result) => (
-              <VideoCard key={result.item.id} video={result.item} />
-            ))}
-          </div>
-        </section>
-      ) : null}
     </div>
+  );
+}
+
+function orderLive(videos: VideoItem[]) {
+  return [...videos].sort((a, b) => {
+    if (a.playback === b.playback) return 0;
+    if (a.playback === "live") return -1;
+    if (b.playback === "live") return 1;
+    return 0;
+  });
+}
+
+function VideoSection({
+  title,
+  videos,
+  variant = "standard",
+}: {
+  title: string;
+  videos: VideoItem[];
+  variant?: "standard" | "shorts";
+}) {
+  return (
+    <section className="space-y-4">
+      <h2 className="text-sm font-semibold tracking-wide text-[color:var(--kino-muted)] uppercase">
+        {title}
+      </h2>
+      <VideoGrid videos={videos} variant={variant} />
+    </section>
   );
 }

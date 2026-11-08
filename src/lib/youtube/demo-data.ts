@@ -2,6 +2,7 @@ import type {
   ChannelItem,
   PlaylistItem,
   SearchResult,
+  SearchType,
   VideoItem,
 } from "./types";
 
@@ -99,6 +100,51 @@ export const DEMO_VIDEOS: VideoItem[] = [
     duration: "PT10M54S",
     viewCount: "3200000",
   },
+  {
+    id: "k5Z7sFwFF7Q",
+    title: "Become a NASA Astronaut!",
+    description:
+      "Applications are open to join NASA's astronaut corps.",
+    channelId: "UCLA_DiR1FfKNvjuUpBHmylQ",
+    channelTitle: "NASA",
+    publishedAt: "2026-11-07T00:00:00Z",
+    thumbnail: "https://i.ytimg.com/vi/k5Z7sFwFF7Q/hqdefault.jpg",
+    viewCount: "33000",
+    playback: "short",
+  },
+  {
+    id: "myZ9kn9MIWQ",
+    title: "2026 Solar Eclipse @ 50,000 Feet",
+    description: "A NASA Short.",
+    channelId: "UCLA_DiR1FfKNvjuUpBHmylQ",
+    channelTitle: "NASA",
+    publishedAt: "2026-08-01T00:00:00Z",
+    thumbnail: "https://i.ytimg.com/vi/myZ9kn9MIWQ/hqdefault.jpg",
+    viewCount: "12000",
+    playback: "short",
+  },
+  {
+    id: "ROboUHfPUrU",
+    title: "Live High-Definition Views from the International Space Station (Official NASA Stream)",
+    description:
+      "Live views from an external camera mounted on the International Space Station.",
+    channelId: "UCLA_DiR1FfKNvjuUpBHmylQ",
+    channelTitle: "NASA",
+    publishedAt: "Started streaming on Oct 22, 2026",
+    thumbnail: "https://i.ytimg.com/vi/ROboUHfPUrU/hqdefault.jpg",
+    playback: "live",
+  },
+  {
+    id: "25JEQqgv5I4",
+    title: "U.S. Spacewalk 101",
+    description: "A recorded NASA spacewalk from the International Space Station.",
+    channelId: "UCLA_DiR1FfKNvjuUpBHmylQ",
+    channelTitle: "NASA",
+    publishedAt: "Streamed 2 days ago",
+    thumbnail: "https://i.ytimg.com/vi/25JEQqgv5I4/hqdefault.jpg",
+    duration: "9:09:18",
+    playback: "vod",
+  },
 ];
 
 export const DEMO_CHANNELS: ChannelItem[] = [
@@ -138,6 +184,13 @@ export const DEMO_CHANNELS: ChannelItem[] = [
     subscriberCount: "1800000",
     videoCount: "90",
     customUrl: "@JacobKatieSchwarz",
+  },
+  {
+    id: "UCLA_DiR1FfKNvjuUpBHmylQ",
+    title: "NASA",
+    description: "NASA's official YouTube channel.",
+    thumbnail: "https://i.ytimg.com/vi/ROboUHfPUrU/hqdefault.jpg",
+    customUrl: "@NASA",
   },
 ];
 
@@ -187,6 +240,15 @@ const CHANNEL_VIDEOS: Record<string, string[]> = {
   UCRijo3ddMTht_IHyNSNXpNQ: ["LXb3EKWsInQ"],
   UCX6OQ3DkcsbYNE6H8uQQuVA: ["YE7VzlLtp-4"],
   "UC4QobU6STSB0a-J95yzOxZQ": ["jNQXAC9IVRw"],
+  UCLA_DiR1FfKNvjuUpBHmylQ: ["25JEQqgv5I4"],
+};
+
+const CHANNEL_SHORTS: Record<string, string[]> = {
+  UCLA_DiR1FfKNvjuUpBHmylQ: ["k5Z7sFwFF7Q", "myZ9kn9MIWQ"],
+};
+
+const CHANNEL_LIVE: Record<string, string[]> = {
+  UCLA_DiR1FfKNvjuUpBHmylQ: ["ROboUHfPUrU", "25JEQqgv5I4"],
 };
 
 function matchesQuery(haystack: string, query: string) {
@@ -195,15 +257,23 @@ function matchesQuery(haystack: string, query: string) {
   return tokens.every((token) => target.includes(token));
 }
 
+function videoMatches(item: VideoItem, type: SearchType) {
+  if (type === "short") return item.playback === "short";
+  if (type === "live") return item.playback === "live" || item.playback === "vod";
+  if (type === "video") return item.playback !== "short";
+  return true;
+}
+
 export function demoSearch(
   query: string,
-  type: "video" | "channel" | "playlist" | "all" = "all",
+  type: SearchType = "all",
 ): SearchResult[] {
   const q = query.trim();
   const results: SearchResult[] = [];
 
-  if (type === "all" || type === "video") {
+  if (type === "all" || type === "video" || type === "short" || type === "live") {
     for (const item of DEMO_VIDEOS) {
+      if (!videoMatches(item, type)) continue;
       if (!q || matchesQuery(`${item.title} ${item.channelTitle} ${item.description}`, q)) {
         results.push({ kind: "video", item });
       }
@@ -255,6 +325,20 @@ export function demoPlaylistItems(playlistId: string): VideoItem[] {
 export function demoChannelVideos(channelId: string): VideoItem[] {
   const ids = CHANNEL_VIDEOS[channelId] ?? [];
   return demoGetVideos(ids);
+}
+
+export function demoChannelShorts(channelId: string): VideoItem[] {
+  const ids = CHANNEL_SHORTS[channelId];
+  if (ids) return demoGetVideos(ids);
+  return DEMO_VIDEOS.filter((video) => video.playback === "short");
+}
+
+export function demoChannelLive(channelId: string): VideoItem[] {
+  const ids = CHANNEL_LIVE[channelId];
+  if (ids) return demoGetVideos(ids);
+  return DEMO_VIDEOS.filter(
+    (video) => video.playback === "live" || video.playback === "vod",
+  );
 }
 
 export function demoRelated(videoId: string): VideoItem[] {

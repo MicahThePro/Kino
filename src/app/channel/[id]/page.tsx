@@ -1,19 +1,29 @@
 import Image from "next/image";
 import { notFound } from "next/navigation";
+import { ChannelTabs } from "@/components/channel-tabs";
 import { ModeBanner } from "@/components/mode-banner";
 import { PlaylistCard } from "@/components/playlist-card";
 import { SiteHeader } from "@/components/site-header";
 import { VideoGrid } from "@/components/video-grid";
 import {
+  getChannelLive,
   getChannelPlaylists,
+  getChannelShorts,
   getChannelUploads,
   getChannels,
 } from "@/lib/youtube/client";
 import { formatCount, formatSubscribers } from "@/lib/youtube/format";
+import type { ChannelTab } from "@/lib/youtube/types";
 
 type ChannelPageProps = {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ tab?: string }>;
 };
+
+function channelTab(value?: string): ChannelTab {
+  if (value === "shorts" || value === "live") return value;
+  return "videos";
+}
 
 export async function generateMetadata({ params }: ChannelPageProps) {
   const { id } = await params;
@@ -23,14 +33,17 @@ export async function generateMetadata({ params }: ChannelPageProps) {
   };
 }
 
-export default async function ChannelPage({ params }: ChannelPageProps) {
+export default async function ChannelPage({ params, searchParams }: ChannelPageProps) {
   const { id } = await params;
+  const tab = channelTab((await searchParams).tab);
   const channelId = decodeURIComponent(id);
 
-  const [channelResult, uploads, playlists] = await Promise.all([
+  const [channelResult, uploads, shorts, live, playlists] = await Promise.all([
     getChannels(channelId),
-    getChannelUploads(channelId),
-    getChannelPlaylists(channelId),
+    tab === "videos" ? getChannelUploads(channelId) : Promise.resolve(null),
+    tab === "shorts" ? getChannelShorts(channelId) : Promise.resolve(null),
+    tab === "live" ? getChannelLive(channelId) : Promise.resolve(null),
+    tab === "videos" ? getChannelPlaylists(channelId) : Promise.resolve(null),
   ]);
 
   const channel = channelResult.data[0];
@@ -47,7 +60,13 @@ export default async function ChannelPage({ params }: ChannelPageProps) {
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6">
         <ModeBanner
           mode={channelResult.mode}
-          error={channelResult.error || uploads.error || playlists.error}
+          error={
+            channelResult.error ||
+            uploads?.error ||
+            shorts?.error ||
+            live?.error ||
+            playlists?.error
+          }
         />
 
         <section className="mb-10 flex flex-col items-start gap-5 sm:flex-row sm:items-center animate-kino-in">
@@ -84,14 +103,43 @@ export default async function ChannelPage({ params }: ChannelPageProps) {
           </div>
         </section>
 
-        <section className="mb-12 space-y-4">
-          <h2 className="font-[family-name:var(--font-display)] text-xl font-bold text-[color:var(--kino-ink)]">
-            Videos
-          </h2>
-          <VideoGrid videos={uploads.data} />
-        </section>
+        <ChannelTabs channelId={channel.id} active={tab} />
 
-        {playlists.data.length > 0 ? (
+        {tab === "videos" ? (
+          <section className="mb-12 space-y-4">
+            <h2 className="font-[family-name:var(--font-display)] text-xl font-bold text-[color:var(--kino-ink)]">
+              Videos
+            </h2>
+            <VideoGrid videos={uploads?.data ?? []} />
+          </section>
+        ) : null}
+
+        {tab === "shorts" ? (
+          <section className="mb-12 space-y-4">
+            <h2 className="font-[family-name:var(--font-display)] text-xl font-bold text-[color:var(--kino-ink)]">
+              Shorts
+            </h2>
+            <VideoGrid
+              videos={shorts?.data ?? []}
+              variant="shorts"
+              empty="No Shorts here yet."
+            />
+          </section>
+        ) : null}
+
+        {tab === "live" ? (
+          <section className="mb-12 space-y-4">
+            <h2 className="font-[family-name:var(--font-display)] text-xl font-bold text-[color:var(--kino-ink)]">
+              Live
+            </h2>
+            <VideoGrid
+              videos={live?.data ?? []}
+              empty="No livestreams here yet."
+            />
+          </section>
+        ) : null}
+
+        {playlists && playlists.data.length > 0 ? (
           <section className="space-y-4">
             <h2 className="font-[family-name:var(--font-display)] text-xl font-bold text-[color:var(--kino-ink)]">
               Playlists

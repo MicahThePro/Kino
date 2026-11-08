@@ -1,4 +1,9 @@
-export type SearchType = "all" | "video" | "channel" | "playlist";
+export type SearchType = "all" | "video" | "short" | "live" | "channel" | "playlist";
+
+export type ChannelTab = "videos" | "shorts" | "live";
+
+/** How a video should be labeled and played. */
+export type Playback = "video" | "short" | "live" | "vod";
 
 export type VideoItem = {
   id: string;
@@ -10,6 +15,7 @@ export type VideoItem = {
   thumbnail: string;
   duration?: string;
   viewCount?: string;
+  playback?: Playback;
 };
 
 export type ChannelItem = {

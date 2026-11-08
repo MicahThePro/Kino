@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ModeBanner } from "@/components/mode-banner";
+import { PlaybackBadge } from "@/components/playback-badge";
 import { PlayerEmbed } from "@/components/player-embed";
 import { SiteHeader } from "@/components/site-header";
 import { VideoCard } from "@/components/video-card";
@@ -8,6 +9,7 @@ import {
   getPlaylistItems,
   getRelatedVideos,
   getVideos,
+  searchYoutube,
 } from "@/lib/youtube/client";
 import {
   formatPublished,
@@ -46,6 +48,21 @@ export default async function WatchPage({ searchParams }: WatchPageProps) {
   const video = videoResult.data[0];
   if (!video) notFound();
 
+  let related = relatedResult;
+  if (related.mode === "demo" || related.data.length === 0) {
+    const search = await searchYoutube(
+      video.title.split(/\s+/).slice(0, 5).join(" "),
+      "video",
+    );
+    const items = search.data
+      .flatMap((result) => (result.kind === "video" ? [result.item] : []))
+      .filter((item) => item.id !== video.id)
+      .slice(0, 12);
+    if (items.length > 0) {
+      related = { mode: search.mode, data: items };
+    }
+  }
+
   const meta = [
     formatViews(video.viewCount),
     formatPublished(video.publishedAt),
@@ -55,20 +72,27 @@ export default async function WatchPage({ searchParams }: WatchPageProps) {
     <>
       <SiteHeader />
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 lg:py-8">
-        <ModeBanner
-          mode={videoResult.mode}
-          error={videoResult.error || relatedResult.error}
-        />
+        <ModeBanner mode={videoResult.mode} error={videoResult.error} />
 
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div
+          className={
+            video.playback === "short"
+              ? "grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,440px)_minmax(0,1fr)]"
+              : "grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_340px]"
+          }
+        >
           <section className="min-w-0 space-y-4">
             <PlayerEmbed
               videoId={video.id}
               playlistId={playlistId}
               title={video.title}
+              playback={video.playback}
             />
 
             <div className="animate-kino-rise space-y-3">
+              {video.playback && video.playback !== "video" ? (
+                <PlaybackBadge playback={video.playback} />
+              ) : null}
               <h1 className="font-[family-name:var(--font-display)] text-2xl leading-tight font-bold text-[color:var(--kino-ink)] sm:text-3xl">
                 {video.title}
               </h1>
@@ -119,7 +143,7 @@ export default async function WatchPage({ searchParams }: WatchPageProps) {
                           : undefined
                       }
                     >
-                      <VideoCard video={item} playlistId={playlistId} />
+                      <VideoCard video={item} playlistId={playlistId} thumb="landscape" />
                     </div>
                   ))}
                 </div>
@@ -131,8 +155,8 @@ export default async function WatchPage({ searchParams }: WatchPageProps) {
                 Up next
               </h2>
               <div className="space-y-4">
-                {relatedResult.data.map((item) => (
-                  <VideoCard key={item.id} video={item} />
+                {related.data.map((item) => (
+                  <VideoCard key={item.id} video={item} thumb="landscape" />
                 ))}
               </div>
             </div>

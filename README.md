@@ -4,14 +4,15 @@ A YouTube video viewing server. Search videos, channels, and playlists, then wat
 
 ## What it does
 
-Kino looks up YouTube metadata on the server and plays videos with the official YouTube embed. The home page loads a popular-video feed. Search covers videos, channels, and playlists. The watch page shows the player, description, related videos, and the current playlist when one is open. Channel pages list uploads and playlists. Playlist pages list their items.
+Kino looks up YouTube metadata on the server and plays videos with the official YouTube embed. The home page loads a popular-video feed. Search covers videos, Shorts, livestreams, channels, and playlists. The watch page shows the player, description, related videos, and the current playlist when one is open. Shorts use a vertical player. Current livestreams play in the embed with a LIVE badge, and past streams play as normal videos with a Stream badge. Channel pages have Videos, Shorts, and Live tabs, plus playlists on the Videos tab.
 
 ## Features
 
 - Home feed of popular videos
-- Search with filters for all results, videos, channels, or playlists
+- Search with filters for all results, videos, Shorts, live (current streams and past streams), channels, or playlists
 - Watch page with a YouTube embed, related videos, and an optional playlist sidebar
-- Channel pages with uploads and playlists
+- Vertical player for Shorts, and a LIVE label when a broadcast is still live
+- Channel pages with Videos, Shorts, and Live tabs, plus playlists
 - Playlist pages
 - JSON routes under `/api/youtube` for search, videos, channels, and playlists
 - Rate limit of 60 requests per minute per client IP on each API route group
@@ -67,4 +68,4 @@ public/                  static SVG assets
 
 ## How it works
 
-Server pages call `src/lib/youtube/client.ts`. That module keeps one Innertube session and maps results into video, channel, and playlist objects, capped at 24 items. The watch page embeds `https://www.youtube.com/embed/<id>` with autoplay. The `/api/youtube/*` routes call the same functions and rate-limit by `x-forwarded-for` or `x-real-ip`. When a lookup fails, the client returns the bundled catalog in `src/lib/youtube/demo-data.ts` so the page still has something to show.
+Server pages call `src/lib/youtube/client.ts`. That module keeps one Innertube session and maps results into video, channel, and playlist objects, capped at 24 items. Shorts come from Innertube's Shorts search and each channel's Shorts tab. Livestreams come from a live search plus each channel's live tab, which includes streams that are on now and streams that already ended. The watch page embeds `https://www.youtube.com/embed/<id>` with autoplay. That same embed plays a live broadcast while it is live and a normal video afterward. Shorts are detected with the `/shorts/` URL and rendered in a 9:16 frame. The `/api/youtube/*` routes call the same functions and rate-limit by `x-forwarded-for` or `x-real-ip`. Search accepts `type=short` and `type=live`. Channel lookups accept `shorts` and `live` channel ids. When a lookup fails, the client returns the bundled catalog in `src/lib/youtube/demo-data.ts` so the page still has something to show.
