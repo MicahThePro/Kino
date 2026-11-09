@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { House, Play } from "lucide-react";
@@ -31,11 +31,11 @@ function NavLink({
       href={href}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors",
-        compact && "flex-1 flex-col gap-1 px-2 py-2 text-[11px]",
+        "flex flex-col items-center gap-1 rounded-xl px-2 py-2 text-[11px] font-medium transition-colors",
+        compact && "flex-1 py-2",
         active
-          ? "bg-[color:var(--kino-ink)] text-white"
-          : "text-[color:var(--kino-muted)] hover:bg-white hover:text-[color:var(--kino-ink)]",
+          ? "bg-neutral-100 text-black"
+          : "text-neutral-700 hover:bg-neutral-100",
       )}
     >
       <Icon className={compact ? "size-5" : "size-5"} strokeWidth={2.25} />
@@ -47,28 +47,33 @@ function NavLink({
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const shorts = pathname.startsWith("/shorts");
+  const warmed = useRef(false);
+
+  useEffect(() => {
+    if (warmed.current) return;
+    warmed.current = true;
+    if (shorts) return;
+    fetch("/api/youtube/shorts").catch(() => undefined);
+  }, [shorts]);
 
   return (
-    <div className="flex h-dvh flex-col">
+    <div className="flex h-dvh flex-col bg-white">
       <SiteHeader />
       <div className="flex min-h-0 flex-1">
-        <aside className="hidden w-56 shrink-0 border-r border-[color:var(--kino-line)] bg-[color:var(--kino-surface)]/80 px-3 py-4 md:block">
+        <aside className="hidden w-[72px] shrink-0 border-r border-neutral-200 bg-white px-1 py-3 md:block">
           <nav className="flex flex-col gap-1" aria-label="Main">
             {LINKS.map((link) => (
               <NavLink key={link.href} {...link} />
             ))}
           </nav>
-          <p className="mt-6 px-3 text-xs leading-relaxed text-[color:var(--kino-muted)]">
-            Signed-out recommendations. Kino does not personalize with a YouTube account.
-          </p>
         </aside>
         <div
           className={cn(
             "min-h-0 min-w-0 flex-1",
-            shorts ? "overflow-hidden pb-14 md:pb-0" : "overflow-y-auto pb-16 md:pb-0",
+            shorts ? "flex h-full flex-col overflow-hidden pb-[4.25rem] md:pb-0" : "overflow-y-auto pb-16 md:pb-0",
           )}
         >
-          {children}
+          {shorts ? <div className="min-h-0 flex-1">{children}</div> : children}
         </div>
       </div>
       <nav

@@ -49,13 +49,13 @@
 }
 
 :root {
-  --kino-bg: #eef2f6;
-  --kino-surface: #f7f9fb;
-  --kino-wash: #e2e8f0;
-  --kino-ink: #12161c;
-  --kino-muted: #5b6675;
-  --kino-accent: #e11d2e;
-  --kino-line: #d5dde7;
+  --kino-bg: #ffffff;
+  --kino-surface: #ffffff;
+  --kino-wash: #f2f2f2;
+  --kino-ink: #0f0f0f;
+  --kino-muted: #606060;
+  --kino-accent: #ff0000;
+  --kino-line: #e5e5e5;
 
   --background: var(--kino-bg);
   --foreground: var(--kino-ink);

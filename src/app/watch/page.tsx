@@ -126,11 +126,7 @@ export default async function WatchPage({ searchParams }: WatchPageProps) {
               ) : null}
             </div>
 
-            {video.playback === "short" ? (
-              <CommentsPanel videoId={video.id} variant="sheet" />
-            ) : (
-              <CommentsPanel videoId={video.id} />
-            )}
+            <CommentsPanel videoId={video.id} />
           </section>
 
           <aside className="space-y-6">

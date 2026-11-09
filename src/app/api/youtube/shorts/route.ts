@@ -12,5 +12,13 @@ export async function GET(request: Request) {
   }
 
   const after = new URL(request.url).searchParams.get("after")?.slice(0, 32);
-  return NextResponse.json(await getShortsFeed(after || undefined));
+  const feed = await getShortsFeed(after || undefined);
+  const cacheable = feed.mode === "live";
+  return NextResponse.json(feed, {
+    headers: {
+      "Cache-Control": cacheable
+        ? `public, s-maxage=${after ? 30 : 60}, stale-while-revalidate=300`
+        : "no-store",
+    },
+  });
 }
