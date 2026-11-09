@@ -49,6 +49,17 @@ function mapComment(node: LooseNode): CommentItem | null {
   };
 }
 
+function dedupeComments(comments: CommentItem[]) {
+  const seen = new Set<string>();
+  const unique: CommentItem[] = [];
+  for (const comment of comments) {
+    if (!comment.id || seen.has(comment.id)) continue;
+    seen.add(comment.id);
+    unique.push(comment);
+  }
+  return unique;
+}
+
 function readPage(page: unknown): { comments: CommentItem[]; cursor?: string } {
   const root = asNode(page);
   const endpoints = [
@@ -57,35 +68,39 @@ function readPage(page: unknown): { comments: CommentItem[]; cursor?: string } {
     ...((root as { on_response_received_actions?: unknown[] } | null)
       ?.on_response_received_actions ?? []),
   ];
-  const comments: CommentItem[] = [];
+  const fromContents: CommentItem[] = [];
+  const fromEndpoints: CommentItem[] = [];
   let cursor: string | undefined;
 
-  const visit = (node: LooseNode) => {
+  const visit = (node: LooseNode, into: CommentItem[]) => {
     if (node.type === "ContinuationItem" && node.endpoint?.payload?.token) {
       cursor = node.endpoint.payload.token;
       return;
     }
     const comment = mapComment(node);
-    if (comment) comments.push(comment);
+    if (comment) into.push(comment);
   };
 
-  if (Array.isArray((root as { contents?: unknown[] } | null)?.contents)) {
-    for (const item of (root as { contents: unknown[] }).contents) {
-      const node = asNode(item);
-      if (node) visit(node);
-    }
-  }
-
+  // getComments() exposes the same threads on `.contents` and again inside
+  // `on_response_received_endpoints`. Prefer the endpoint payload, which is
+  // also what continuation pages return, and only fall back to `.contents`.
   for (const endpoint of endpoints) {
     const node = asNode(endpoint);
     const contents = node?.contents ?? node?.items ?? [];
     for (const item of contents) {
       const child = asNode(item);
-      if (child) visit(child);
+      if (child) visit(child, fromEndpoints);
     }
   }
 
-  return { comments, cursor };
+  if (fromEndpoints.length === 0 && Array.isArray((root as { contents?: unknown[] } | null)?.contents)) {
+    for (const item of (root as { contents: unknown[] }).contents) {
+      const node = asNode(item);
+      if (node) visit(node, fromContents);
+    }
+  }
+
+  return { comments: dedupeComments(fromEndpoints.length > 0 ? fromEndpoints : fromContents), cursor };
 }
 
 export async function listComments(
@@ -103,7 +118,7 @@ export async function listComments(
     if (cursor) {
       const page = await yt.actions.execute("/next", { token: cursor, parse: true });
       const parsed = readPage(page);
-      return { mode: "live", comments: parsed.comments, cursor: parsed.cursor };
+      return { mode: "live", comments: dedupeComments(parsed.comments), cursor: parsed.cursor };
     }
 
     const comments = await yt.getComments(id);
