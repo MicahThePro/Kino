@@ -5,22 +5,29 @@ import { Plus, X } from "lucide-react";
 import {
   INTERESTS_EVENT,
   SUGGESTED_INTERESTS,
+  type FeedSelection,
   interestsPromptSeen,
   markInterestsPromptSeen,
+  readFeedSelection,
   readInterests,
+  writeFeedSelection,
   writeInterests,
 } from "@/lib/interests";
 
+function topicOn(selection: FeedSelection, topic: string) {
+  return selection.mode === "interests" || (selection.mode === "topic" && selection.topic.toLowerCase() === topic.toLowerCase());
+}
+
 export function InterestsBar({
   topics,
-  active,
+  selection,
   onChange,
-  onFilter,
+  onSelect,
 }: {
   topics: string[];
-  active: string | null;
+  selection: FeedSelection;
   onChange: (topics: string[]) => void;
-  onFilter: (topic: string | null) => void;
+  onSelect: (selection: FeedSelection) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState("");
@@ -47,7 +54,9 @@ export function InterestsBar({
     const updated = topics.filter((topic) => topic !== value);
     writeInterests(updated);
     onChange(updated);
-    if (active?.toLowerCase() === value.toLowerCase()) onFilter(null);
+    if (selection.mode === "topic" && selection.topic.toLowerCase() === value.toLowerCase()) {
+      onSelect({ mode: "interests" });
+    }
   }
 
   function onSubmit(event: FormEvent) {
@@ -57,13 +66,14 @@ export function InterestsBar({
 
   return (
     <div className="mb-6">
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2" data-selection={selection.mode === "topic" ? selection.topic : selection.mode}>
         <span className="mr-1 text-sm font-semibold text-[color:var(--kino-ink)]">Your interests</span>
         {topics.length > 0 ? (
           <button
             type="button"
-            onClick={() => onFilter(null)}
-            className={`rounded-full px-3 py-1 text-sm font-medium ${active ? "bg-neutral-100 text-neutral-700" : "bg-black text-white"}`}
+            aria-pressed={selection.mode === "all"}
+            onClick={() => onSelect({ mode: "all" })}
+            className={`rounded-full px-3 py-1 text-sm font-medium ${selection.mode === "all" ? "bg-black text-white" : "bg-neutral-100 text-neutral-700"}`}
           >
             All
           </button>
@@ -71,9 +81,20 @@ export function InterestsBar({
         {topics.map((topic) => (
           <span
             key={topic}
-            className={`inline-flex items-center rounded-full ${active?.toLowerCase() === topic.toLowerCase() ? "bg-black text-white" : "bg-neutral-100 text-neutral-800"}`}
+            className={`inline-flex items-center rounded-full ${topicOn(selection, topic) ? "bg-black text-white" : "bg-neutral-100 text-neutral-800"}`}
           >
-            <button type="button" className="px-3 py-1 text-sm font-medium" onClick={() => onFilter(active?.toLowerCase() === topic.toLowerCase() ? null : topic)}>
+            <button
+              type="button"
+              aria-pressed={topicOn(selection, topic)}
+              className="px-3 py-1 text-sm font-medium"
+              onClick={() =>
+                onSelect(
+                  selection.mode === "topic" && selection.topic.toLowerCase() === topic.toLowerCase()
+                    ? { mode: "interests" }
+                    : { mode: "topic", topic },
+                )
+              }
+            >
               {topic}
             </button>
             <button type="button" aria-label={`Remove ${topic}`} className="pr-2" onClick={() => remove(topic)}>
@@ -165,10 +186,15 @@ export function InterestsBar({
 
 export function useInterests() {
   const [topics, setTopics] = useState<string[]>([]);
+  const [selection, setSelectionState] = useState<FeedSelection>({ mode: "interests" });
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    const sync = () => setTopics(readInterests());
+    const sync = () => {
+      const nextTopics = readInterests();
+      setTopics(nextTopics);
+      setSelectionState(readFeedSelection(nextTopics));
+    };
     sync();
     setReady(true);
     window.addEventListener(INTERESTS_EVENT, sync);
@@ -179,5 +205,10 @@ export function useInterests() {
     };
   }, []);
 
-  return { topics, setTopics, ready };
+  function setSelection(next: FeedSelection) {
+    writeFeedSelection(next);
+    setSelectionState(next);
+  }
+
+  return { topics, setTopics, selection, setSelection, ready };
 }
