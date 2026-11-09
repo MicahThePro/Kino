@@ -31,8 +31,8 @@ export function VideoCard({
       <div
         className={
           vertical
-            ? "relative aspect-[9/16] overflow-hidden rounded-2xl bg-[color:var(--kino-wash)]"
-            : "relative aspect-video overflow-hidden rounded-2xl bg-[color:var(--kino-wash)]"
+            ? "relative aspect-[9/16] overflow-hidden rounded-xl bg-[color:var(--kino-wash)]"
+            : "relative aspect-video overflow-hidden rounded-xl bg-[color:var(--kino-wash)]"
         }
       >
         {video.thumbnail ? (
@@ -45,7 +45,7 @@ export function VideoCard({
                 ? "(max-width: 640px) 50vw, 20vw"
                 : "(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
             }
-            className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.04]"
+            className="object-cover"
           />
         ) : null}
         {video.playback !== "live" ? (

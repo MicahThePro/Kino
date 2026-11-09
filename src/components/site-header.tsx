@@ -21,8 +21,8 @@ export function SiteHeader() {
   return (
     <header
       className={cn(
-        "sticky top-0 z-40 border-b border-[color:var(--kino-line)] bg-[color:var(--kino-surface)]/90 backdrop-blur-md",
-        "animate-kino-in",
+        "sticky top-0 z-40 border-b border-neutral-200 bg-white",
+        pathname.startsWith("/shorts") && "max-md:hidden",
       )}
     >
       <div
