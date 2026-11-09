@@ -7,6 +7,8 @@ export function LiveChat({ videoId }: { videoId: string }) {
   const [messages, setMessages] = useState<LiveChatMessage[]>([]);
   const [live, setLive] = useState(true);
   const [error, setError] = useState<string | undefined>();
+  const [attempt, setAttempt] = useState(0);
+  const [settled, setSettled] = useState(false);
   const [domain, setDomain] = useState("");
   const [open, setOpen] = useState(true);
   const [stuck, setStuck] = useState(true);
@@ -15,31 +17,50 @@ export function LiveChat({ videoId }: { videoId: string }) {
   useEffect(() => {
     setDomain(window.location.hostname);
     let cancelled = false;
+    let timer = 0;
     async function pull() {
       try {
         const response = await fetch(`/api/youtube/live-chat?v=${encodeURIComponent(videoId)}`, { cache: "no-store" });
         const payload = (await response.json()) as { messages?: LiveChatMessage[]; live?: boolean; error?: string };
         if (cancelled) return;
+        setSettled(true);
         setLive(payload.live !== false);
-        setError(payload.error);
-        if (payload.messages && payload.messages.length > 0) {
+        const incoming = payload.messages ?? [];
+        if (incoming.length > 0) {
+          setError(undefined);
           setMessages((current) => {
             const seen = new Set(current.map((item) => item.id));
-            const next = payload.messages!.filter((item) => item.id && !seen.has(item.id));
+            const next = incoming.filter((item) => item.id && !seen.has(item.id));
             return [...current, ...next].slice(-80);
           });
+        } else {
+          setError(payload.error || (response.ok ? "No chat messages yet" : "Live chat is unavailable"));
         }
       } catch {
-        if (!cancelled) setError("Live chat is unavailable");
+        if (!cancelled) {
+          setSettled(true);
+          setError("Live chat is unavailable");
+        }
       }
     }
     pull();
-    const timer = window.setInterval(pull, 5000);
+    const schedule = () => {
+      timer = window.setTimeout(async () => {
+        if (document.visibilityState !== "hidden") await pull();
+        if (!cancelled) schedule();
+      }, 8000);
+    };
+    schedule();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") pull();
+    };
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [videoId]);
+  }, [videoId, attempt]);
 
   useEffect(() => {
     if (!stuck) return;
@@ -48,7 +69,7 @@ export function LiveChat({ videoId }: { videoId: string }) {
     node.scrollTop = node.scrollHeight;
   }, [messages, stuck, open]);
 
-  const useEmbed = !live || (messages.length === 0 && Boolean(error));
+  const useEmbed = settled && messages.length === 0;
 
   return (
     <section className="overflow-hidden rounded-2xl border border-[color:var(--kino-line)] bg-white">
@@ -64,15 +85,33 @@ export function LiveChat({ videoId }: { videoId: string }) {
       </div>
       {open ? (
         useEmbed ? (
-          domain ? (
-            <iframe
-              title="Live chat"
-              src={`https://www.youtube.com/live_chat?v=${encodeURIComponent(videoId)}&embed_domain=${encodeURIComponent(domain)}`}
-              className="h-[min(48dvh,440px)] w-full max-w-full border-0 bg-white lg:h-[calc(100dvh-12rem)]"
-            />
-          ) : (
-            <div className="grid h-40 place-items-center text-sm text-[color:var(--kino-muted)]">Opening chat…</div>
-          )
+          <div className="flex h-[min(48dvh,440px)] flex-col lg:h-[calc(100dvh-12rem)]">
+            <div className="flex items-center justify-between gap-2 px-3 py-2">
+              <p className="min-w-0 text-sm break-words text-[color:var(--kino-muted)]">
+                {live ? "Chat messages did not load." : "This stream has no live chat."} YouTube's chat is shown instead.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setSettled(false);
+                  setError(undefined);
+                  setAttempt((value) => value + 1);
+                }}
+                className="min-h-10 shrink-0 rounded-full bg-neutral-100 px-3 text-sm font-semibold"
+              >
+                Retry
+              </button>
+            </div>
+            {domain ? (
+              <iframe
+                title="Live chat"
+                src={`https://www.youtube.com/live_chat?v=${encodeURIComponent(videoId)}&embed_domain=${encodeURIComponent(domain)}`}
+                className="min-h-0 w-full max-w-full flex-1 border-0 bg-white"
+              />
+            ) : (
+              <div className="grid flex-1 place-items-center text-sm text-[color:var(--kino-muted)]">Opening chat…</div>
+            )}
+          </div>
         ) : (
           <div className="relative flex h-[min(48dvh,440px)] flex-col lg:h-[calc(100dvh-12rem)]">
             <div
@@ -85,7 +124,7 @@ export function LiveChat({ videoId }: { videoId: string }) {
               className="min-h-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto px-3 py-3"
             >
               {messages.length === 0 ? (
-                <p className="text-sm text-[color:var(--kino-muted)]">Waiting for new messages…</p>
+                <p className="text-sm text-[color:var(--kino-muted)]">{error ? "Trying again…" : "Loading chat…"}</p>
               ) : null}
               {messages.map((message) => {
                 const initial = message.author.replace(/^@/, "").slice(0, 1).toUpperCase() || "?";

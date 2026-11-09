@@ -52,7 +52,7 @@ function CommentRow({
   }
 
   return (
-    <article className={`flex gap-3 py-3 ${nested ? "ml-6" : ""}`}>
+    <article className={`flex min-w-0 max-w-full gap-3 py-3 ${nested ? "ml-4 sm:ml-6" : ""}`}>
       <div className="size-10 shrink-0 overflow-hidden rounded-full bg-neutral-200">
         {comment.authorAvatar ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -69,8 +69,8 @@ function CommentRow({
           {comment.published ? <span> · {comment.published}</span> : null}
           {comment.pinned ? <span className="ml-2 font-semibold text-red-600">Pinned</span> : null}
         </p>
-        <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-neutral-900">{comment.text}</p>
-        <div className="mt-1.5 flex items-center gap-3 text-xs text-neutral-600">
+        <p className="mt-1 max-w-full text-sm leading-relaxed break-words whitespace-pre-wrap text-neutral-900 [overflow-wrap:anywhere]">{comment.text}</p>
+        <div className="mt-1.5 flex max-w-full flex-wrap items-center gap-3 text-xs text-neutral-600">
           <button
             type="button"
             aria-label="Like comment"
@@ -212,7 +212,7 @@ export function CommentsBody({
           </button>
         ) : null}
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+      <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-4 pb-4">
         <CommentList videoId={videoId} />
       </div>
     </div>
@@ -223,7 +223,7 @@ export function CommentsSheet({ videoId, onClose }: { videoId: string; onClose: 
   return (
     <div className="fixed inset-0 z-[60] flex flex-col justify-end bg-black/50" onClick={onClose}>
       <div
-        className="flex max-h-[75dvh] w-full flex-col overflow-hidden rounded-t-2xl bg-white pb-[max(0.5rem,env(safe-area-inset-bottom))] text-black shadow-2xl"
+        className="flex max-h-[75dvh] w-full max-w-full flex-col overflow-x-hidden rounded-t-2xl bg-white pb-[max(0.5rem,env(safe-area-inset-bottom))] text-black shadow-2xl"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-neutral-300" />

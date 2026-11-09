@@ -107,6 +107,8 @@
 
   html {
     @apply font-sans;
+    overflow-x: hidden;
+    max-width: 100%;
   }
 }
 
