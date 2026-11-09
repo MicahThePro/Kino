@@ -474,6 +474,52 @@ async function searchLive(query: string): Promise<SearchResult[]> {
   return videos.slice(0, MAX_RESULTS).map((item) => ({ kind: "video" as const, item }));
 }
 
+export async function searchFeedPage(
+  query: string,
+  kind: "video" | "short" | "live",
+  cursor?: string,
+): Promise<{ items: VideoItem[]; cursor?: string; mode: YoutubeMode; error?: string }> {
+  const q = query.trim();
+  try {
+    const yt = await getInnertube();
+    if (cursor) {
+      const page = await yt.actions.execute("/search", { token: cursor, parse: true });
+      const memo = page.on_response_received_commands_memo;
+      const nodes = [
+        ...(memo?.get("Video") ?? []),
+        ...(memo?.get("LockupView") ?? []),
+        ...(memo?.get("ShortsLockupView") ?? []),
+        ...(memo?.get("ReelItem") ?? []),
+      ];
+      const items = nodes
+        .map((node) => mapVideoItem(node, kind === "short" ? "shorts" : kind === "live" ? "live" : undefined))
+        .filter((video): video is VideoItem => Boolean(video));
+      const next = (memo?.get("ContinuationItem")?.[0] as { endpoint?: { payload?: { token?: string } } } | undefined)
+        ?.endpoint?.payload?.token;
+      return { items, cursor: next, mode: "live" };
+    }
+
+    const response = await yt.search(q || (kind === "live" ? "live" : "shorts"), {
+      type: kind === "short" ? "shorts" : "video",
+      features: kind === "live" ? ["live"] : undefined,
+    });
+    const results = mapSearchResults(
+      response.results ?? [],
+      kind === "short" ? "short" : kind === "live" ? "live" : "video",
+    );
+    const items = results.flatMap((result) => (result.kind === "video" ? [result.item] : []));
+    const next = (response.memo?.get("ContinuationItem")?.[0] as { endpoint?: { payload?: { token?: string } } } | undefined)
+      ?.endpoint?.payload?.token;
+    return { items, cursor: next, mode: items.length > 0 ? "live" : "demo" };
+  } catch (error) {
+    return {
+      items: [],
+      mode: "demo",
+      error: error instanceof Error ? error.message : "Search failed",
+    };
+  }
+}
+
 export async function searchYoutube(
   query: string,
   type: SearchType = "all",

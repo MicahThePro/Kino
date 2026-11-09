@@ -21,11 +21,17 @@ export async function GET(request: Request) {
     .map((id) => id.trim())
     .filter(Boolean)
     .slice(0, 80);
+  const topics = searchParams
+    .getAll("topics")
+    .map((topic) => topic.trim().slice(0, 40))
+    .filter(Boolean)
+    .slice(0, 8);
 
   const feed = await getShortsFeed({
     seed: Number.isFinite(seed) ? seed : undefined,
     after,
     exclude,
+    topics,
   });
 
   return NextResponse.json(feed, {

@@ -102,9 +102,20 @@ async function reelFrom(startId: string, exclude: Set<string>) {
   return ids.slice(0, 8).map((id) => shortItem(id));
 }
 
-async function searchSeed(seed: number, exclude: Set<string>) {
-  const first = SEEDS[Math.abs(seed) % SEEDS.length];
-  const second = SEEDS[Math.abs(seed * 3 + 5) % SEEDS.length];
+function topicQueries(seed: number, topics: string[]) {
+  if (topics.length === 0) {
+    return [
+      SEEDS[Math.abs(seed) % SEEDS.length],
+      SEEDS[Math.abs(seed * 3 + 5) % SEEDS.length],
+    ];
+  }
+  const first = topics[Math.abs(seed) % topics.length];
+  const second = topics.length > 1 ? topics[Math.abs(seed + 1) % topics.length] : SEEDS[Math.abs(seed) % SEEDS.length];
+  return [first, second];
+}
+
+async function searchSeed(seed: number, exclude: Set<string>, topics: string[] = []) {
+  const [first, second] = topicQueries(seed, topics);
   const [primary, extra] = await Promise.all([
     searchYoutube(first, "short"),
     first === second ? Promise.resolve(null) : searchYoutube(second, "short"),
@@ -130,22 +141,24 @@ export async function getShortsFeed(options?: {
   seed?: number;
   exclude?: string[];
   after?: string;
+  topics?: string[];
 }): Promise<ShortsFeed> {
   const seed = Number.isFinite(options?.seed) ? Number(options?.seed) : Date.now();
   const exclude = new Set((options?.exclude ?? []).map((id) => id.trim()).filter(Boolean));
   const after = options?.after?.trim();
+  const topics = (options?.topics ?? []).map((topic) => topic.trim()).filter(Boolean).slice(0, 8);
 
   try {
     if (after) {
       const reel = await reelFrom(after, exclude);
       if (reel.length > 0) return { mode: "live", items: dedupeShorts(reel) };
-      const fallback = await searchSeed(seed + exclude.size, exclude);
+      const fallback = await searchSeed(seed + exclude.size, exclude, topics);
       const fresh = fallback.items.filter((item) => item.id !== after && !exclude.has(item.id));
       if (fresh.length > 0) return { mode: fallback.mode, items: dedupeShorts(fresh), error: fallback.error };
       return { mode: "demo", items: demoShortsFeed(after).filter((item) => !exclude.has(item.id)) };
     }
 
-    const searched = await searchSeed(seed, exclude);
+    const searched = await searchSeed(seed, exclude, topics);
     if (searched.items.length === 0) {
       return { mode: "demo", items: demoShortsFeed(), error: searched.error || "No Shorts returned" };
     }
