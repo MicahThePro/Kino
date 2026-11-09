@@ -55,7 +55,7 @@ export default async function ChannelPage({ params, searchParams }: ChannelPageP
 
   return (
     <>
-      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6">
+      <main className="mx-auto w-full max-w-7xl min-w-0 flex-1 px-4 py-6 sm:px-6 sm:py-8">
         <ModeBanner
           mode={channelResult.mode}
           error={
@@ -80,7 +80,7 @@ export default async function ChannelPage({ params, searchParams }: ChannelPageP
             ) : null}
           </div>
           <div className="min-w-0 space-y-2">
-            <h1 className="font-[family-name:var(--font-display)] text-3xl font-extrabold tracking-tight text-[color:var(--kino-ink)] sm:text-4xl">
+            <h1 className="font-[family-name:var(--font-display)] text-3xl font-extrabold tracking-tight break-words text-[color:var(--kino-ink)] sm:text-4xl">
               {channel.title}
             </h1>
             {channel.customUrl ? (

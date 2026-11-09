@@ -29,7 +29,7 @@ export function ChannelTabs({
             href={href}
             aria-current={selected ? "page" : undefined}
             className={cn(
-              "rounded-full px-4 py-1.5 text-sm font-medium transition-colors",
+              "inline-flex min-h-10 items-center rounded-full px-4 py-2 text-sm font-medium transition-colors",
               selected
                 ? "bg-[color:var(--kino-ink)] text-white"
                 : "bg-white/80 text-[color:var(--kino-muted)] hover:bg-white hover:text-[color:var(--kino-ink)]",

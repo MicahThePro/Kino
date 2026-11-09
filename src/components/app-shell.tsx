@@ -5,6 +5,9 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { House, Play } from "lucide-react";
 import { SiteHeader } from "@/components/site-header";
+import { armShortsFromGesture, primeShorts, resetPrime } from "@/lib/shorts-player";
+import { INTERESTS_EVENT } from "@/lib/interests";
+import { noteUserGesture } from "@/lib/playback";
 import { cn } from "@/lib/utils";
 
 const LINKS = [
@@ -30,9 +33,17 @@ function NavLink({
     <Link
       href={href}
       aria-current={active ? "page" : undefined}
+      onPointerDown={() => {
+        noteUserGesture();
+        if (href === "/shorts") armShortsFromGesture();
+      }}
+      onClick={() => {
+        noteUserGesture();
+        if (href === "/shorts") armShortsFromGesture();
+      }}
       className={cn(
         "flex flex-col items-center gap-1 rounded-xl px-2 py-2 text-[11px] font-medium transition-colors",
-        compact && "flex-1 py-2",
+        compact && "min-h-12 flex-1 py-2",
         active
           ? "bg-neutral-100 text-black"
           : "text-neutral-700 hover:bg-neutral-100",
@@ -51,10 +62,21 @@ export function AppShell({ children }: { children: ReactNode }) {
   const warmed = useRef(false);
 
   useEffect(() => {
-    if (!shorts || warmed.current) return;
-    warmed.current = true;
-    router.prefetch("/");
-    fetch("/api/youtube/home").catch(() => undefined);
+    if (shorts) {
+      if (warmed.current) return;
+      warmed.current = true;
+      router.prefetch("/");
+      fetch("/api/youtube/home").catch(() => undefined);
+      return;
+    }
+    router.prefetch("/shorts");
+    primeShorts().catch(() => undefined);
+    const refresh = () => {
+      resetPrime();
+      primeShorts().catch(() => undefined);
+    };
+    window.addEventListener(INTERESTS_EVENT, refresh);
+    return () => window.removeEventListener(INTERESTS_EVENT, refresh);
   }, [router, shorts]);
 
   return (
@@ -69,9 +91,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           </nav>
         </aside>
         <div
+          data-kino-scroll
           className={cn(
             "min-h-0 min-w-0 flex-1",
-            shorts ? "flex h-full flex-col overflow-hidden pb-[4.25rem] md:pb-0" : "overflow-y-auto pb-16 md:pb-0",
+            shorts ? "flex h-full flex-col overflow-hidden pb-[4.25rem] md:pb-0" : "overflow-x-hidden overflow-y-auto overscroll-y-contain pb-[4.75rem] md:pb-0",
           )}
         >
           {shorts ? <div className="min-h-0 flex-1">{children}</div> : children}

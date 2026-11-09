@@ -1,6 +1,9 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
 import { PlaybackBadge } from "@/components/playback-badge";
+import { noteUserGesture } from "@/lib/playback";
 import { formatDuration, formatPublished, formatViews } from "@/lib/youtube/format";
 import type { VideoItem } from "@/lib/youtube/types";
 
@@ -26,7 +29,8 @@ export function VideoCard({
   return (
     <Link
       href={href}
-      className="group block animate-kino-rise outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--kino-accent)]"
+      onClick={() => noteUserGesture()}
+      className="group block min-w-0 animate-kino-rise outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--kino-accent)]"
     >
       <div
         className={

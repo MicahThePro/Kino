@@ -10,6 +10,20 @@ const loadHome = unstable_cache(async () => getHomeRecommendations(), ["kino-hom
 let memory: { exp: number; value: Awaited<ReturnType<typeof getHomeRecommendations>> } | null = null;
 let inflight: Promise<Awaited<ReturnType<typeof getHomeRecommendations>>> | null = null;
 
+function shuffle<T>(items: T[]) {
+  const copy = [...items];
+  for (let index = copy.length - 1; index > 0; index -= 1) {
+    const swap = Math.floor(Math.random() * (index + 1));
+    [copy[index], copy[swap]] = [copy[swap], copy[index]];
+  }
+  return copy;
+}
+
+export async function loadFreshHome() {
+  const feed = await getHomeRecommendations();
+  return { ...feed, data: shuffle(feed.data), live: shuffle(feed.live) };
+}
+
 export async function loadCachedHome() {
   if (memory && memory.exp > Date.now()) return memory.value;
   if (!inflight) {

@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { Plus, X } from "lucide-react";
+import { Plus, RefreshCw, X } from "lucide-react";
 import {
   INTERESTS_EVENT,
   SUGGESTED_INTERESTS,
@@ -23,11 +23,15 @@ export function InterestsBar({
   selection,
   onChange,
   onSelect,
+  onRefresh,
+  refreshing,
 }: {
   topics: string[];
   selection: FeedSelection;
   onChange: (topics: string[]) => void;
   onSelect: (selection: FeedSelection) => void;
+  onRefresh?: () => void;
+  refreshing?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState("");
@@ -73,7 +77,7 @@ export function InterestsBar({
             type="button"
             aria-pressed={selection.mode === "all"}
             onClick={() => onSelect({ mode: "all" })}
-            className={`rounded-full px-3 py-1 text-sm font-medium ${selection.mode === "all" ? "bg-black text-white" : "bg-neutral-100 text-neutral-700"}`}
+            className={`inline-flex min-h-10 items-center rounded-full px-3 text-sm font-medium ${selection.mode === "all" ? "bg-black text-white" : "bg-neutral-100 text-neutral-700"}`}
           >
             All
           </button>
@@ -86,7 +90,7 @@ export function InterestsBar({
             <button
               type="button"
               aria-pressed={topicOn(selection, topic)}
-              className="px-3 py-1 text-sm font-medium"
+              className="inline-flex min-h-10 items-center px-3 text-sm font-medium"
               onClick={() =>
                 onSelect(
                   selection.mode === "topic" && selection.topic.toLowerCase() === topic.toLowerCase()
@@ -105,11 +109,21 @@ export function InterestsBar({
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="inline-flex items-center gap-1 rounded-full border border-neutral-300 px-3 py-1 text-sm font-medium text-neutral-800 hover:bg-neutral-50"
+          className="inline-flex min-h-10 items-center gap-1 rounded-full border border-neutral-300 px-3 text-sm font-medium text-neutral-800 hover:bg-neutral-50"
         >
           <Plus className="size-4" />
           Tune your feed
         </button>
+        {onRefresh ? (
+          <button
+            type="button"
+            aria-label="Refresh feed"
+            onClick={onRefresh}
+            className="inline-flex size-10 items-center justify-center rounded-full border border-neutral-300 text-neutral-800 hover:bg-neutral-50"
+          >
+            <RefreshCw className={`size-4 ${refreshing ? "animate-spin" : ""}`} />
+          </button>
+        ) : null}
       </div>
 
       {prompt ? (
@@ -138,7 +152,7 @@ export function InterestsBar({
                 key={topic}
                 type="button"
                 onClick={() => add(topic)}
-                className="rounded-full bg-white px-3 py-1 text-sm font-medium ring-1 ring-neutral-200"
+                className="inline-flex min-h-10 items-center rounded-full bg-white px-3 text-sm font-medium ring-1 ring-neutral-200"
               >
                 {topic}
               </button>

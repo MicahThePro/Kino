@@ -39,7 +39,7 @@ export function SiteHeader() {
           <span className="flex size-9 items-center justify-center rounded-xl bg-[color:var(--kino-accent)] text-white shadow-[0_10px_30px_-12px_rgba(225,29,46,0.75)] transition-transform duration-300 group-hover:-rotate-6 group-hover:scale-105">
             <Clapperboard className="size-4.5" strokeWidth={2.25} />
           </span>
-          <span className="font-[family-name:var(--font-display)] text-xl font-bold tracking-tight text-[color:var(--kino-ink)] sm:text-2xl">
+          <span className="hidden font-[family-name:var(--font-display)] text-xl font-bold tracking-tight text-[color:var(--kino-ink)] min-[420px]:inline sm:text-2xl">
             Kino
           </span>
         </Link>
