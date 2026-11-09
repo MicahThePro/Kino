@@ -15,6 +15,23 @@ import { CommentsBody, CommentsSheet } from "@/components/comments-panel";
 import type { ShortsFeed } from "@/lib/youtube/shorts-feed";
 import type { VideoItem } from "@/lib/youtube/types";
 
+const SEEN_KEY = "kino-seen-shorts";
+
+function readSeen() {
+  if (typeof window === "undefined") return [] as string[];
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(SEEN_KEY) || "[]");
+    return Array.isArray(parsed) ? parsed.filter((id) => typeof id === "string") : [];
+  } catch {
+    return [] as string[];
+  }
+}
+
+function rememberSeen(ids: string[]) {
+  const next = [...ids, ...readSeen()].filter((id, index, all) => id && all.indexOf(id) === index).slice(0, 120);
+  window.localStorage.setItem(SEEN_KEY, JSON.stringify(next));
+}
+
 function embedSrc(id: string) {
   const params = new URLSearchParams({
     autoplay: "1",
@@ -68,15 +85,15 @@ function ActionButton({
   );
 }
 
-export function ShortsFeed({ initial }: { initial: ShortsFeed }) {
+export function ShortsFeed() {
   const scroller = useRef<HTMLDivElement>(null);
   const frames = useRef(new Map<string, HTMLIFrameElement | null>());
-  const requested = useRef(new Set<string>());
-  const [items, setItems] = useState<VideoItem[]>(initial.items);
-  const [active, setActive] = useState(initial.items[0]?.id ?? "");
+  const paging = useRef(false);
+  const [items, setItems] = useState<VideoItem[]>([]);
+  const [active, setActive] = useState("");
   const [sound, setSound] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [note, setNote] = useState(initial.mode === "demo");
+  const [loading, setLoading] = useState(true);
+  const [note, setNote] = useState(false);
   const [commentsFor, setCommentsFor] = useState<string | null>(null);
   const [liked, setLiked] = useState<Record<string, "up" | "down" | null>>({});
   const [copied, setCopied] = useState(false);
@@ -115,24 +132,78 @@ export function ShortsFeed({ initial }: { initial: ShortsFeed }) {
   }, [active, sound, items.length]);
 
   useEffect(() => {
-    if (activeIndex < items.length - 2 || loading) return;
-    const after = items[items.length - 1]?.id;
-    if (!after || requested.current.has(after)) return;
-    requested.current.add(after);
-    setLoading(true);
-    fetch(`/api/youtube/shorts?after=${encodeURIComponent(after)}`)
+    let cancelled = false;
+    const seen = readSeen();
+    const params = new URLSearchParams({
+      seed: String(Math.floor(Math.random() * 1_000_000_000)),
+    });
+    if (seen.length > 0) params.set("exclude", seen.slice(0, 60).join(","));
+    fetch(`/api/youtube/shorts?${params}`, { cache: "no-store" })
       .then((response) => response.json() as Promise<ShortsFeed>)
       .then((feed) => {
+        if (cancelled) return;
+        const ordered = [
+          ...feed.items.filter((item) => !seen.includes(item.id)),
+          ...feed.items.filter((item) => seen.includes(item.id)),
+        ];
+        setItems(ordered);
+        setActive(ordered[0]?.id ?? "");
+        setNote(feed.mode === "demo");
+        if (ordered[0]) rememberSeen([ordered[0].id]);
+      })
+      .catch(() => {
+        if (!cancelled) setNote(true);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (active) rememberSeen([active]);
+  }, [active]);
+
+  useEffect(() => {
+    if (items.length === 0 || activeIndex < items.length - 2 || paging.current) return;
+    const after = items[items.length - 1]?.id;
+    if (!after) return;
+    paging.current = true;
+    setLoading(true);
+    const params = new URLSearchParams({
+      after,
+      seed: String(Math.floor(Math.random() * 1_000_000_000)),
+      exclude: items.map((item) => item.id).slice(-60).join(","),
+    });
+    fetch(`/api/youtube/shorts?${params}`, { cache: "no-store" })
+      .then((response) => response.json() as Promise<ShortsFeed>)
+      .then(async (feed) => {
         if (feed.mode === "demo") setNote(true);
+        let incoming = feed.items;
+        const known = new Set(items.map((item) => item.id));
+        if (!incoming.some((item) => item.id && !known.has(item.id))) {
+          const retry = new URLSearchParams({
+            seed: String(Math.floor(Math.random() * 1_000_000_000)),
+            exclude: items.map((item) => item.id).slice(-60).join(","),
+          });
+          const again = await fetch(`/api/youtube/shorts?${retry}`, { cache: "no-store" });
+          const extra = (await again.json()) as ShortsFeed;
+          incoming = extra.items;
+        }
         setItems((current) => {
           const seen = new Set(current.map((item) => item.id));
-          const next = feed.items.filter((item) => item.id && !seen.has(item.id));
+          const next = incoming.filter((item) => item.id && !seen.has(item.id));
           return next.length > 0 ? [...current, ...next] : current;
         });
       })
       .catch(() => undefined)
-      .finally(() => setLoading(false));
-  }, [activeIndex, items, loading]);
+      .finally(() => {
+        paging.current = false;
+        setLoading(false);
+      });
+  }, [activeIndex, items]);
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     const root = scroller.current;
@@ -219,6 +290,14 @@ export function ShortsFeed({ initial }: { initial: ShortsFeed }) {
   }
 
   const commentsItem = items.find((item) => item.id === commentsFor);
+
+  if (items.length === 0) {
+    return (
+      <div className="flex h-full items-center justify-center bg-black">
+        <div className="h-full aspect-[9/16] max-w-full animate-pulse bg-white/10" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full min-h-0 bg-black text-white">
