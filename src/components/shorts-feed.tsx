@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
+  ChevronDown,
+  ChevronUp,
   MessageCircle,
   MoreVertical,
   Share2,
@@ -56,6 +58,33 @@ function post(frame: HTMLIFrameElement | null, func: "unMute" | "mute" | "playVi
   frame?.contentWindow?.postMessage(JSON.stringify({ event: "command", func, args: [] }), "*");
 }
 
+function ShortNavButton({
+  direction,
+  unavailable,
+  solid,
+  onClick,
+}: {
+  direction: "up" | "down";
+  unavailable: boolean;
+  solid?: boolean;
+  onClick: () => void;
+}) {
+  const Icon = direction === "up" ? ChevronUp : ChevronDown;
+  return (
+    <button
+      type="button"
+      aria-label={direction === "up" ? "Previous Short" : "Next Short"}
+      disabled={unavailable}
+      onClick={onClick}
+      className={`pointer-events-auto grid size-11 place-items-center rounded-full transition ${
+        solid ? "bg-white text-black shadow-md hover:bg-neutral-100" : "bg-black/50 text-white backdrop-blur-sm"
+      } ${unavailable ? "pointer-events-none opacity-30" : ""}`}
+    >
+      <Icon className="size-6" strokeWidth={2.25} />
+    </button>
+  );
+}
+
 function ActionButton({
   label,
   count,
@@ -101,6 +130,19 @@ export function ShortsFeed() {
   const [moreFor, setMoreFor] = useState<string | null>(null);
 
   const activeIndex = Math.max(0, items.findIndex((item) => item.id === active));
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+
+  function go(direction: -1 | 1) {
+    const root = scroller.current;
+    const total = itemsRef.current.length;
+    if (!root || total === 0) return;
+    const height = root.clientHeight || 1;
+    const index = Math.round(root.scrollTop / height);
+    const next = Math.max(0, Math.min(total - 1, index + direction));
+    if (next === index) return;
+    root.scrollTo({ top: next * height, behavior: "smooth" });
+  }
 
   useEffect(() => {
     const root = scroller.current;
@@ -209,16 +251,20 @@ export function ShortsFeed() {
       });
   }, [activeIndex, items]);
 
-  function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    const root = scroller.current;
-    if (!root || commentsFor) return;
-    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
-    event.preventDefault();
-    root.scrollBy({
-      top: event.key === "ArrowDown" ? root.clientHeight : -root.clientHeight,
-      behavior: "smooth",
-    });
-  }
+  useEffect(() => {
+    function onKey(event: globalThis.KeyboardEvent) {
+      if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+      const target = event.target;
+      if (target instanceof HTMLElement) {
+        const tag = target.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || target.isContentEditable) return;
+      }
+      event.preventDefault();
+      go(event.key === "ArrowDown" ? 1 : -1);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
 
   async function share(item: VideoItem) {
     const url = `${window.location.origin}/watch?v=${encodeURIComponent(item.id)}`;
@@ -303,13 +349,16 @@ export function ShortsFeed() {
     );
   }
 
+  const atFirst = activeIndex <= 0;
+  const atLast = activeIndex >= items.length - 1;
+
   return (
-    <div className="flex h-full min-h-0 bg-black text-white">
+    <div className="relative flex h-full min-h-0 bg-black text-white">
+      <div className="relative h-full min-w-0 flex-1 @container">
       <div
         ref={scroller}
         tabIndex={0}
-        onKeyDown={onKeyDown}
-        className="relative h-full min-w-0 flex-1 snap-y snap-mandatory overflow-y-scroll outline-none"
+        className="relative h-full min-w-0 snap-y snap-mandatory overflow-y-scroll outline-none"
       >
         {note ? (
           <p className="pointer-events-none absolute top-3 left-3 z-10 rounded-full bg-black/70 px-3 py-1 text-xs text-white">
@@ -395,6 +444,18 @@ export function ShortsFeed() {
             </section>
           );
         })}
+      </div>
+      <div
+        className="pointer-events-none absolute top-1/2 z-30 hidden -translate-y-1/2 flex-col gap-3 md:flex"
+        style={{ left: "calc(50% + min(100cqh * 9 / 32, 50% - 5rem) + 3.25rem)" }}
+      >
+        <ShortNavButton direction="up" unavailable={atFirst} solid onClick={() => go(-1)} />
+        <ShortNavButton direction="down" unavailable={atLast} solid onClick={() => go(1)} />
+      </div>
+      <div className="pointer-events-none absolute top-1/2 left-3 z-30 flex -translate-y-1/2 flex-col gap-3 md:hidden">
+        <ShortNavButton direction="up" unavailable={atFirst} onClick={() => go(-1)} />
+        <ShortNavButton direction="down" unavailable={atLast} onClick={() => go(1)} />
+      </div>
       </div>
 
       {commentsItem ? (

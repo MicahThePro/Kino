@@ -5,6 +5,7 @@ import { InterestsBar, useInterests } from "@/components/interests-bar";
 import { HomeFeedSkeleton } from "@/components/home-feed";
 import { ModeBanner } from "@/components/mode-banner";
 import { VideoGrid } from "@/components/video-grid";
+import type { FeedSelection } from "@/lib/interests";
 import type { VideoItem, YoutubeMode } from "@/lib/youtube/types";
 
 type HomePayload = {
@@ -25,9 +26,13 @@ function dedupe(items: VideoItem[]) {
   });
 }
 
+function selectionKey(selection: FeedSelection) {
+  return selection.mode === "topic" ? `topic:${selection.topic}` : selection.mode;
+}
+
 export function TunedHome() {
-  const { topics, setTopics, ready } = useInterests();
-  const [filter, setFilter] = useState<string | null>(null);
+  const { topics, setTopics, selection, setSelection, ready } = useInterests();
+  const filterKey = selectionKey(selection);
   const [live, setLive] = useState<VideoItem[]>([]);
   const [videos, setVideos] = useState<VideoItem[]>([]);
   const [cursors, setCursors] = useState<Record<string, string>>({});
@@ -45,8 +50,9 @@ export function TunedHome() {
     let cancelled = false;
     setLoading(true);
     const params = new URLSearchParams();
-    topics.forEach((topic) => params.append("topics", topic));
-    if (filter) params.set("only", filter);
+    const narrowed = selection.mode === "topic" ? [selection.topic] : selection.mode === "interests" ? topics : [];
+    narrowed.forEach((topic) => params.append("topics", topic));
+    if (selection.mode === "topic") params.set("only", selection.topic);
     fetch(`/api/youtube/home?${params}`, { cache: "no-store" })
       .then((response) => response.json() as Promise<HomePayload>)
       .then((payload) => {
@@ -66,11 +72,11 @@ export function TunedHome() {
     return () => {
       cancelled = true;
     };
-  }, [ready, topics, filter]);
+  }, [ready, topics, filterKey, selection]);
 
   useEffect(() => {
     const node = sentinel.current;
-    if (!node || topics.length === 0) return;
+    if (!node || selection.mode === "all" || (selection.mode === "interests" && topics.length === 0)) return;
     const observer = new IntersectionObserver((entries) => {
       if (!entries.some((entry) => entry.isIntersecting)) return;
       if (pagingRef.current || Object.keys(cursorsRef.current).length === 0) return;
@@ -83,8 +89,8 @@ export function TunedHome() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          topics,
-          only: filter,
+          topics: selection.mode === "topic" ? [selection.topic] : topics,
+          only: selection.mode === "topic" ? selection.topic : undefined,
           cursors: cursorsRef.current,
           exclude: shown,
         }),
@@ -103,11 +109,11 @@ export function TunedHome() {
     }, { rootMargin: "400px" });
     observer.observe(node);
     return () => observer.disconnect();
-  }, [topics, filter, loading]);
+  }, [topics, filterKey, selection, loading]);
 
   return (
     <>
-      <InterestsBar topics={topics} active={filter} onChange={setTopics} onFilter={setFilter} />
+      <InterestsBar topics={topics} selection={selection} onChange={setTopics} onSelect={setSelection} />
       {loading ? <HomeFeedSkeleton /> : null}
       {!loading ? (
         <>
@@ -115,18 +121,18 @@ export function TunedHome() {
           {live.length > 0 ? (
             <section className="mb-10">
               <h2 className="mb-5 font-[family-name:var(--font-display)] text-xl font-bold text-[color:var(--kino-ink)]">
-                {filter ? `Live ${filter}` : topics.length > 0 ? "Live for you" : "Live now"}
+                {selection.mode === "topic" ? `Live ${selection.topic}` : selection.mode === "interests" && topics.length > 0 ? "Live for you" : "Live now"}
               </h2>
               <VideoGrid videos={live} />
             </section>
           ) : null}
           <section>
             <h2 className="mb-5 font-[family-name:var(--font-display)] text-xl font-bold text-[color:var(--kino-ink)]">
-              {filter ? filter : topics.length > 0 ? "For you" : mode === "live" ? "Recommended" : "Featured watches"}
+              {selection.mode === "topic" ? selection.topic : selection.mode === "interests" && topics.length > 0 ? "For you" : mode === "live" ? "Recommended" : "Featured watches"}
             </h2>
             <VideoGrid videos={videos} />
           </section>
-          {topics.length > 0 ? <div ref={sentinel} className="h-8" /> : null}
+          {selection.mode !== "all" && topics.length > 0 ? <div ref={sentinel} className="h-8" /> : null}
           {paging ? <p className="py-4 text-center text-sm text-[color:var(--kino-muted)]">Loading more…</p> : null}
         </>
       ) : null}
