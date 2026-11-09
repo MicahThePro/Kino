@@ -12,6 +12,7 @@ import {
   VolumeX,
 } from "lucide-react";
 import { CommentsBody, CommentsSheet } from "@/components/comments-panel";
+import { readInterests } from "@/lib/interests";
 import type { ShortsFeed } from "@/lib/youtube/shorts-feed";
 import type { VideoItem } from "@/lib/youtube/types";
 
@@ -137,6 +138,7 @@ export function ShortsFeed() {
     const params = new URLSearchParams({
       seed: String(Math.floor(Math.random() * 1_000_000_000)),
     });
+    readInterests().forEach((topic) => params.append("topics", topic));
     if (seen.length > 0) params.set("exclude", seen.slice(0, 60).join(","));
     fetch(`/api/youtube/shorts?${params}`, { cache: "no-store" })
       .then((response) => response.json() as Promise<ShortsFeed>)
@@ -177,6 +179,7 @@ export function ShortsFeed() {
       seed: String(Math.floor(Math.random() * 1_000_000_000)),
       exclude: items.map((item) => item.id).slice(-60).join(","),
     });
+    readInterests().forEach((topic) => params.append("topics", topic));
     fetch(`/api/youtube/shorts?${params}`, { cache: "no-store" })
       .then((response) => response.json() as Promise<ShortsFeed>)
       .then(async (feed) => {
@@ -188,6 +191,7 @@ export function ShortsFeed() {
             seed: String(Math.floor(Math.random() * 1_000_000_000)),
             exclude: items.map((item) => item.id).slice(-60).join(","),
           });
+          readInterests().forEach((topic) => retry.append("topics", topic));
           const again = await fetch(`/api/youtube/shorts?${retry}`, { cache: "no-store" });
           const extra = (await again.json()) as ShortsFeed;
           incoming = extra.items;

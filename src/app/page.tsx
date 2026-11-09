@@ -1,5 +1,4 @@
-import { Suspense } from "react";
-import { HomeFeed, HomeFeedSkeleton } from "@/components/home-feed";
+import { TunedHome } from "@/components/tuned-home";
 
 export default function HomePage() {
   return (
@@ -12,13 +11,11 @@ export default function HomePage() {
           Search. Play. Stay awhile.
         </h1>
         <p className="mt-3 max-w-xl text-base text-[color:var(--kino-muted)] sm:text-lg">
-          Recommended long videos and livestreams, plus a Shorts feed. Nothing
-          here is signed in to YouTube, so it is not your personal home page.
+          Recommended long videos and livestreams, plus a Shorts feed. Add
+          interests to tilt Home, Shorts, and Live toward what you care about.
         </p>
       </section>
-      <Suspense fallback={<HomeFeedSkeleton />}>
-        <HomeFeed />
-      </Suspense>
+      <TunedHome />
     </main>
   );
 }
