@@ -38,7 +38,12 @@ function CommentRow({
     setLoading(true);
     try {
       const page = await loadComments(videoId, undefined, comment.replyToken);
-      setReplies(page.comments);
+      const seen = new Set<string>();
+      setReplies(page.comments.filter((item) => {
+        if (!item.id || seen.has(item.id) || item.id === comment.id) return false;
+        seen.add(item.id);
+        return true;
+      }));
     } catch {
       setReplies([]);
     } finally {
@@ -136,11 +141,23 @@ export function CommentList({ videoId }: { videoId: string }) {
   async function more() {
     if (!cursor) return;
     const next = await loadComments(videoId, cursor);
-    setExtra((current) => [...current, ...next.comments]);
-    setCursor(next.cursor);
+    setExtra((current) => {
+      const seen = new Set([...(page?.comments ?? []), ...current].map((item) => item.id));
+      return [...current, ...next.comments.filter((item) => item.id && !seen.has(item.id))];
+    });
+    setCursor(next.cursor && next.cursor !== cursor ? next.cursor : undefined);
   }
 
-  const comments = [...(page?.comments ?? []), ...extra];
+  const comments = (() => {
+    const seen = new Set<string>();
+    const unique: CommentItem[] = [];
+    for (const comment of [...(page?.comments ?? []), ...extra]) {
+      if (!comment.id || seen.has(comment.id)) continue;
+      seen.add(comment.id);
+      unique.push(comment);
+    }
+    return unique;
+  })();
 
   return (
     <div>
