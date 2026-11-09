@@ -9,7 +9,7 @@ Kino looks up YouTube metadata on the server and plays videos with the official 
 ## Features
 
 - Home recommendations that mix livestreams and long videos. Signed-out YouTube does not return a personal home feed, so this uses a popular-video search plus the live filter.
-- A Shorts button in the desktop sidebar and the mobile bottom bar. The feed shell shows immediately. The first page is one signed-out Shorts search, cached for a minute, and the next Short’s player is preloaded. Each Short loops muted until you tap for sound. Comments dock to the right of the video on desktop and slide up from the bottom on a phone.
+- A Shorts button in the desktop sidebar and the mobile bottom bar. Each visit picks a new pair of signed-out searches, shuffles them, and skips Shorts already watched in this browser. Scrolling follows that Short’s reel and, when it repeats, another search. The page shell appears immediately. Each Short loops muted until you tap for sound. Comments dock to the right of the video on desktop and slide up from the bottom on a phone.
 - Comments on long videos, Shorts, and past streams, with more comments and replies when YouTube returns them. Shorts open comments in a slide-up panel.
 - Live chat on a current livestream, beside the player on desktop and under it on a phone, using YouTube’s live chat embed.
 - Search with filters for all results, videos, Shorts, live (current streams and past streams), channels, or playlists

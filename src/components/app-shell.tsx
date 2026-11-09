@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, type ReactNode } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { House, Play } from "lucide-react";
 import { SiteHeader } from "@/components/site-header";
 import { cn } from "@/lib/utils";
@@ -46,15 +46,16 @@ function NavLink({
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const shorts = pathname.startsWith("/shorts");
   const warmed = useRef(false);
 
   useEffect(() => {
-    if (warmed.current) return;
+    if (!shorts || warmed.current) return;
     warmed.current = true;
-    if (shorts) return;
-    fetch("/api/youtube/shorts").catch(() => undefined);
-  }, [shorts]);
+    router.prefetch("/");
+    fetch("/api/youtube/home").catch(() => undefined);
+  }, [router, shorts]);
 
   return (
     <div className="flex h-dvh flex-col bg-white">
