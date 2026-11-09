@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import Link from "next/link";
 import {
   ChevronDown,
@@ -15,6 +15,16 @@ import {
 } from "lucide-react";
 import { CommentsBody, CommentsSheet } from "@/components/comments-panel";
 import { readInterests } from "@/lib/interests";
+import {
+  getShortsSnapshot,
+  playShort,
+  preloadShort,
+  shortsPlayerHost,
+  subscribeShorts,
+  takePrimedShorts,
+  toggleShortMute,
+  unmuteFromGesture,
+} from "@/lib/shorts-player";
 import type { ShortsFeed } from "@/lib/youtube/shorts-feed";
 import type { VideoItem } from "@/lib/youtube/types";
 
@@ -33,29 +43,6 @@ function readSeen() {
 function rememberSeen(ids: string[]) {
   const next = [...ids, ...readSeen()].filter((id, index, all) => id && all.indexOf(id) === index).slice(0, 120);
   window.localStorage.setItem(SEEN_KEY, JSON.stringify(next));
-}
-
-function embedSrc(id: string) {
-  const params = new URLSearchParams({
-    autoplay: "1",
-    mute: "1",
-    loop: "1",
-    playlist: id,
-    controls: "0",
-    rel: "0",
-    modestbranding: "1",
-    playsinline: "1",
-    enablejsapi: "1",
-    iv_load_policy: "3",
-    fs: "0",
-    disablekb: "1",
-  });
-  if (typeof window !== "undefined") params.set("origin", window.location.origin);
-  return `https://www.youtube.com/embed/${encodeURIComponent(id)}?${params}`;
-}
-
-function post(frame: HTMLIFrameElement | null, func: "unMute" | "mute" | "playVideo" | "pauseVideo") {
-  frame?.contentWindow?.postMessage(JSON.stringify({ event: "command", func, args: [] }), "*");
 }
 
 function ShortNavButton({
@@ -117,11 +104,11 @@ function ActionButton({
 
 export function ShortsFeed() {
   const scroller = useRef<HTMLDivElement>(null);
-  const frames = useRef(new Map<string, HTMLIFrameElement | null>());
+  const playerSlot = useRef<HTMLDivElement>(null);
   const paging = useRef(false);
+  const player = useSyncExternalStore(subscribeShorts, getShortsSnapshot, getShortsSnapshot);
   const [items, setItems] = useState<VideoItem[]>([]);
   const [active, setActive] = useState("");
-  const [sound, setSound] = useState(false);
   const [loading, setLoading] = useState(true);
   const [note, setNote] = useState(false);
   const [commentsFor, setCommentsFor] = useState<string | null>(null);
@@ -163,18 +150,52 @@ export function ShortsFeed() {
   }, [items]);
 
   useEffect(() => {
-    for (const [id, frame] of frames.current) {
-      if (id === active) {
-        post(frame, "playVideo");
-        post(frame, sound ? "unMute" : "mute");
-      } else {
-        post(frame, "pauseVideo");
-        post(frame, "mute");
-      }
-    }
-  }, [active, sound, items.length]);
+    const slot = playerSlot.current;
+    const node = shortsPlayerHost();
+    if (!slot || !node || node.parentElement === slot) return;
+    slot.appendChild(node);
+  });
 
   useEffect(() => {
+    if (!active) return;
+    playShort(active);
+    const next = items[activeIndex + 1];
+    if (next) preloadShort(next.id);
+  }, [active, activeIndex, items]);
+
+  useEffect(() => {
+    if (!player.prompt) return;
+    const once = (event: Event) => {
+      if (!event.isTrusted) return;
+      unmuteFromGesture();
+    };
+    const options = { capture: true, passive: true } as const;
+    window.addEventListener("pointerdown", once, options);
+    window.addEventListener("keydown", once, options);
+    window.addEventListener("touchstart", once, options);
+    window.addEventListener("wheel", once, options);
+    const root = scroller.current;
+    root?.addEventListener("touchstart", once, { passive: true });
+    root?.addEventListener("scroll", once, { passive: true });
+    return () => {
+      window.removeEventListener("pointerdown", once, options);
+      window.removeEventListener("keydown", once, options);
+      window.removeEventListener("touchstart", once, options);
+      window.removeEventListener("wheel", once, options);
+      root?.removeEventListener("touchstart", once);
+      root?.removeEventListener("scroll", once);
+    };
+  }, [player.prompt]);
+
+  useEffect(() => {
+    const primed = takePrimedShorts();
+    if (primed && primed.length > 0) {
+      setItems(primed);
+      setActive(primed[0]?.id ?? "");
+      setLoading(false);
+      if (primed[0]) rememberSeen([primed[0].id]);
+      return;
+    }
     let cancelled = false;
     const seen = readSeen();
     const params = new URLSearchParams({
@@ -365,48 +386,40 @@ export function ShortsFeed() {
             Backup Shorts. Not personalized.
           </p>
         ) : null}
+        <div
+          className="pointer-events-none absolute left-0 z-[1] flex h-full w-full items-end justify-center"
+          style={{ top: `${activeIndex * 100}%` }}
+        >
+          <div className="flex h-full min-w-0 items-end justify-center gap-3">
+            <div ref={playerSlot} className="relative h-full max-h-full min-h-0 w-auto max-w-full" style={{ aspectRatio: "9 / 16" }}>
+            </div>
+            <div className="mb-4 hidden w-11 shrink-0 md:block" />
+          </div>
+        </div>
         {items.map((item, index) => {
           const playing = item.id === active;
-          const near = Math.abs(index - activeIndex) <= 1;
           const title = item.title && item.title !== "Short" ? item.title : "";
           const initial = (item.channelTitle || title || "?").slice(0, 1).toUpperCase();
           return (
             <section
               key={item.id}
               data-short-id={item.id}
-              className="relative flex h-full w-full min-w-0 snap-start snap-always items-center justify-center overflow-hidden"
+              className="relative z-10 flex h-full w-full min-w-0 snap-start snap-always items-center justify-center overflow-hidden"
             >
               <div className="flex h-full max-h-full min-w-0 items-end justify-center gap-3">
                 <div className="relative h-full max-h-full min-h-0 w-auto max-w-full min-w-0" style={{ aspectRatio: "9 / 16" }}>
-                  <div className="absolute inset-0 overflow-hidden bg-neutral-950">
-                    {near ? (
-                      <iframe
-                        ref={(node) => {
-                          frames.current.set(item.id, node);
-                        }}
-                        src={embedSrc(item.id)}
-                        title={title || "Short"}
-                        allow="autoplay; encrypted-media; picture-in-picture"
-                        className="absolute inset-0 h-full w-full border-0"
-                        onLoad={() => {
-                          const frame = frames.current.get(item.id) ?? null;
-                          if (item.id !== active) {
-                            post(frame, "pauseVideo");
-                            post(frame, "mute");
-                          }
-                        }}
-                      />
-                    ) : (
+                  <div className={`absolute inset-0 overflow-hidden ${playing ? "bg-transparent" : "bg-neutral-950"}`}>
+                    {item.thumbnail && !playing ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={item.thumbnail} alt="" className="absolute inset-0 h-full w-full object-cover" />
-                    )}
+                    ) : null}
                     <button
                       type="button"
-                      onClick={() => setSound((value) => !value)}
+                      onClick={() => toggleShortMute()}
                       className="absolute top-3 right-3 z-10 grid size-10 place-items-center rounded-full bg-black/55 text-white"
-                      aria-label={sound ? "Mute" : "Unmute"}
+                      aria-label={player.muted ? "Unmute" : "Mute"}
                     >
-                      {sound && playing ? <Volume2 className="size-5" /> : <VolumeX className="size-5" />}
+                      {player.muted || !playing ? <VolumeX className="size-5" /> : <Volume2 className="size-5" />}
                     </button>
                     <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/85 via-black/35 to-transparent px-3 pt-16 pb-3 pr-16 md:pr-4">
                       <div className="pointer-events-auto flex items-center gap-2">
@@ -472,6 +485,16 @@ export function ShortsFeed() {
         <div className="md:hidden">
           <CommentsSheet videoId={commentsItem.id} onClose={() => setCommentsFor(null)} />
         </div>
+      ) : null}
+
+      {player.prompt ? (
+        <button
+          type="button"
+          onClick={() => unmuteFromGesture()}
+          className="fixed top-1/2 left-1/2 z-[80] -translate-x-1/2 -translate-y-1/2 rounded-full bg-white px-4 py-2 text-sm font-bold text-black shadow-lg"
+        >
+          Tap to unmute
+        </button>
       ) : null}
 
       {loading ? (

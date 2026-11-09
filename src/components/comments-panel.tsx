@@ -223,7 +223,7 @@ export function CommentsSheet({ videoId, onClose }: { videoId: string; onClose: 
   return (
     <div className="fixed inset-0 z-[60] flex flex-col justify-end bg-black/50" onClick={onClose}>
       <div
-        className="flex max-h-[75dvh] w-full flex-col rounded-t-2xl bg-white text-black shadow-2xl"
+        className="flex max-h-[75dvh] w-full flex-col overflow-hidden rounded-t-2xl bg-white pb-[max(0.5rem,env(safe-area-inset-bottom))] text-black shadow-2xl"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-neutral-300" />
@@ -251,7 +251,7 @@ export function CommentsPanel({ videoId }: { videoId: string }) {
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="inline-flex items-center gap-2 rounded-full bg-neutral-100 px-4 py-2 text-sm font-semibold text-neutral-900"
+          className="inline-flex min-h-11 items-center gap-2 rounded-full bg-neutral-100 px-4 py-2 text-sm font-semibold text-neutral-900"
         >
           <MessageCircle className="size-4" />
           Comments

@@ -71,7 +71,7 @@ export default async function WatchPage({ searchParams }: WatchPageProps) {
 
   return (
     <>
-      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 lg:py-8">
+      <main className="mx-auto w-full max-w-7xl min-w-0 flex-1 px-4 py-6 sm:px-6 lg:py-8">
         <ModeBanner mode={videoResult.mode} error={videoResult.error} />
 
         <div
@@ -101,7 +101,7 @@ export default async function WatchPage({ searchParams }: WatchPageProps) {
               {video.playback && video.playback !== "video" ? (
                 <PlaybackBadge playback={video.playback} />
               ) : null}
-              <h1 className="font-[family-name:var(--font-display)] text-2xl leading-tight font-bold text-[color:var(--kino-ink)] sm:text-3xl">
+              <h1 className="font-[family-name:var(--font-display)] text-2xl leading-tight font-bold break-words text-[color:var(--kino-ink)] sm:text-3xl">
                 {video.title}
               </h1>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-[color:var(--kino-muted)]">
@@ -120,7 +120,7 @@ export default async function WatchPage({ searchParams }: WatchPageProps) {
                 {meta.length > 0 ? <span>{meta.join(" · ")}</span> : null}
               </div>
               {video.description ? (
-                <p className="max-h-40 overflow-y-auto whitespace-pre-wrap rounded-2xl bg-white/70 p-4 text-sm leading-relaxed text-[color:var(--kino-muted)]">
+                <p className="max-h-40 overflow-x-hidden overflow-y-auto rounded-2xl bg-white/70 p-4 text-sm leading-relaxed break-words whitespace-pre-wrap text-[color:var(--kino-muted)]">
                   {video.description}
                 </p>
               ) : null}

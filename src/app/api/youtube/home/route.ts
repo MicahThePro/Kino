@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { loadCachedHome } from "@/components/home-feed";
+import { loadCachedHome, loadFreshHome } from "@/components/home-feed";
 import { getTunedHome } from "@/lib/youtube/tuned-feed";
 
 function topicsFrom(values: string[]) {
@@ -10,10 +10,11 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const topics = topicsFrom(searchParams.getAll("topics"));
   if (topics.length === 0) {
-    const feed = await loadCachedHome();
+    const fresh = searchParams.get("fresh") === "1";
+    const feed = fresh ? await loadFreshHome() : await loadCachedHome();
     return NextResponse.json(
       { ...feed, videos: feed.data, cursors: {} },
-      { headers: { "Cache-Control": "public, s-maxage=45, stale-while-revalidate=120" } },
+      { headers: { "Cache-Control": fresh ? "no-store" : "public, s-maxage=45, stale-while-revalidate=120" } },
     );
   }
 

@@ -35,14 +35,16 @@ export function SearchBar({ initialQuery = "" }: { initialQuery?: string }) {
         onChange={(event) => setQuery(event.target.value)}
         placeholder="Search"
         aria-label="Search YouTube"
-        className="h-11 rounded-full border-[color:var(--kino-line)] bg-white pl-10 pr-24 text-base shadow-[0_1px_0_rgba(20,16,12,0.04)] transition-[box-shadow,border-color] focus-visible:border-[color:var(--kino-accent)] focus-visible:ring-[color:var(--kino-accent)]/20"
+        className="h-11 rounded-full border-[color:var(--kino-line)] bg-white pl-10 pr-12 text-base shadow-[0_1px_0_rgba(20,16,12,0.04)] transition-[box-shadow,border-color] focus-visible:border-[color:var(--kino-accent)] focus-visible:ring-[color:var(--kino-accent)]/20 sm:pr-24"
       />
       <Button
         type="submit"
         size="sm"
-        className="absolute right-1.5 h-8 rounded-full bg-[color:var(--kino-ink)] px-4 text-white hover:bg-[color:var(--kino-accent)]"
+        aria-label="Search"
+        className="absolute right-1.5 h-9 w-9 rounded-full bg-[color:var(--kino-ink)] px-0 text-white hover:bg-[color:var(--kino-accent)] sm:w-auto sm:px-4"
       >
-        Search
+        <Search className="size-4 sm:hidden" />
+        <span className="hidden sm:inline">Search</span>
       </Button>
     </form>
   );
