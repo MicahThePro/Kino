@@ -1,259 +1,13 @@
 import type { VideoItem } from "@/lib/youtube/types";
 import { readInterests } from "@/lib/interests";
-import { noteUserGesture, readWantSound, userActivated, writeWantSound } from "@/lib/playback";
 
-export type ShortsSnapshot = {
-  videoId: string;
-  muted: boolean;
-  prompt: boolean;
-};
-
-let snapshot: ShortsSnapshot = { videoId: "", muted: true, prompt: false };
-const listeners = new Set<() => void>();
-let host: HTMLDivElement | null = null;
-let frame: HTMLIFrameElement | null = null;
-let preload: HTMLIFrameElement | null = null;
 let primed: VideoItem[] | null = null;
 let primePromise: Promise<VideoItem[] | null> | null = null;
-let sessionUnmuted = false;
-let heardSound = false;
-let playing = false;
-let fallbackTimer = 0;
-let mutedRestarts = 0;
 
-function emit() {
-  listeners.forEach((listener) => listener());
-}
-
-export function subscribeShorts(listener: () => void) {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
-
-export function getShortsSnapshot() {
-  return snapshot;
-}
-
-function setSnapshot(next: ShortsSnapshot) {
-  if (next.videoId === snapshot.videoId && next.muted === snapshot.muted && next.prompt === snapshot.prompt) return;
-  snapshot = next;
-  if (host) {
-    host.dataset.videoId = snapshot.videoId;
-    host.dataset.muted = snapshot.muted ? "1" : "0";
-    host.dataset.prompt = snapshot.prompt ? "1" : "0";
-  }
-  emit();
-}
-
-export function embedUrl(id: string, muted: boolean, autoplay = true) {
-  const params = new URLSearchParams({
-    autoplay: autoplay ? "1" : "0",
-    mute: muted ? "1" : "0",
-    loop: "1",
-    playlist: id,
-    controls: "0",
-    rel: "0",
-    modestbranding: "1",
-    playsinline: "1",
-    enablejsapi: "1",
-    iv_load_policy: "3",
-    fs: "0",
-    disablekb: "1",
-    origin: window.location.origin,
-  });
-  return `https://www.youtube.com/embed/${encodeURIComponent(id)}?${params}`;
-}
-
-function post(func: string, args: unknown[] = []) {
-  frame?.contentWindow?.postMessage(JSON.stringify({ event: "command", func, args }), "*");
-}
-
-function listen() {
-  frame?.contentWindow?.postMessage(JSON.stringify({ event: "listening", id: 1, channel: "widget" }), "*");
-}
-
-function isIOS() {
+export function isIOS() {
   if (typeof navigator === "undefined") return false;
   const agent = navigator.userAgent || "";
   return /iPhone|iPad|iPod/i.test(agent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-}
-
-function shouldUnmute() {
-  if (!readWantSound()) return false;
-  if (snapshot.prompt && !sessionUnmuted) return false;
-  return sessionUnmuted || userActivated();
-}
-
-function onMessage(event: MessageEvent) {
-  if (!frame || event.source !== frame.contentWindow || typeof event.data !== "string") return;
-  let payload: { event?: string; info?: number | { muted?: boolean; playerState?: number } };
-  try {
-    payload = JSON.parse(event.data);
-  } catch {
-    return;
-  }
-  const info = payload.info;
-  const state = typeof info === "number" ? info : info?.playerState;
-  if (payload.event === "onStateChange" && state === 0) post("playVideo");
-  if (state === 1) {
-    playing = true;
-    mutedRestarts = 0;
-    window.clearTimeout(fallbackTimer);
-  }
-  if (state === 1 && info && typeof info === "object" && typeof info.muted === "boolean") {
-    if (!info.muted) {
-      heardSound = true;
-      sessionUnmuted = true;
-      setSnapshot({ ...snapshot, muted: false, prompt: false });
-    } else if (readWantSound() && !heardSound) {
-      sessionUnmuted = false;
-      setSnapshot({ ...snapshot, muted: true, prompt: true });
-    }
-  }
-}
-
-function ensureFrame(id: string, muted: boolean) {
-  if (!host) {
-    host = document.createElement("div");
-    host.id = "kino-shorts-player";
-    host.style.cssText = "position:absolute;inset:0;pointer-events:none;";
-  }
-  if (!frame) {
-    frame = document.createElement("iframe");
-    frame.allow = "autoplay; encrypted-media; picture-in-picture";
-    frame.setAttribute("playsinline", "");
-    frame.setAttribute("webkit-playsinline", "");
-    frame.setAttribute("allowfullscreen", "");
-    frame.title = "Short";
-    frame.style.cssText = "position:absolute;inset:0;width:100%;height:100%;border:0;pointer-events:none;";
-    host.appendChild(frame);
-    window.addEventListener("message", onMessage);
-    frame.addEventListener("load", () => {
-      listen();
-      post("playVideo");
-      post(shouldUnmute() ? "unMute" : "mute");
-      window.clearTimeout(fallbackTimer);
-      fallbackTimer = window.setTimeout(() => {
-        if (playing) {
-          if (readWantSound() && !heardSound) setSnapshot({ ...snapshot, muted: true, prompt: true });
-          return;
-        }
-        const current = snapshot.videoId;
-        if (frame && current && mutedRestarts < 1) {
-          mutedRestarts += 1;
-          playing = false;
-          frame.src = embedUrl(current, true);
-        }
-        post("mute");
-        post("playVideo");
-        sessionUnmuted = false;
-        setSnapshot({ ...snapshot, muted: true, prompt: readWantSound() });
-      }, 1000);
-    });
-  }
-  host.dataset.videoId = id;
-  host.dataset.muted = muted ? "1" : "0";
-  host.dataset.prompt = snapshot.prompt ? "1" : "0";
-  if (!frame.src.includes(`/embed/${id}`)) {
-    playing = false;
-    frame.src = embedUrl(id, muted);
-  }
-  setSnapshot({ videoId: id, muted, prompt: snapshot.prompt });
-  return host;
-}
-
-export function shortsPlayerHost() {
-  return host;
-}
-
-export function playShort(id: string) {
-  if (!id || typeof window === "undefined") return;
-  const want = readWantSound();
-  if (!frame) {
-    const muted = isIOS() || !want;
-    if (!muted && want && userActivated()) sessionUnmuted = true;
-    ensureFrame(id, muted);
-    if (muted && want) setSnapshot({ videoId: id, muted: true, prompt: true });
-    return;
-  }
-  const unmute = shouldUnmute();
-  if (snapshot.videoId !== id) {
-    playing = false;
-    if (isIOS()) frame.src = embedUrl(id, !unmute);
-    else post("loadVideoById", [{ videoId: id, startSeconds: 0 }]);
-  }
-  post("playVideo");
-  post(unmute ? "unMute" : "mute");
-  if (unmute) post("setVolume", [100]);
-  setSnapshot({ videoId: id, muted: !unmute, prompt: unmute ? false : snapshot.prompt });
-}
-
-export function preloadShort(id: string) {
-  if (!id || typeof document === "undefined" || id === snapshot.videoId) return;
-  if (!preload) {
-    preload = document.createElement("iframe");
-    preload.title = "";
-    preload.setAttribute("aria-hidden", "true");
-    preload.tabIndex = -1;
-    preload.allow = "autoplay";
-    preload.style.cssText = "position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:-9999px;top:0;";
-    document.body.appendChild(preload);
-  }
-  if (!preload.src.includes(`/embed/${id}`)) preload.src = embedUrl(id, true, false);
-}
-
-export function unmuteFromGesture() {
-  noteUserGesture();
-  sessionUnmuted = true;
-  heardSound = true;
-  writeWantSound(true);
-  listen();
-  post("unMute");
-  post("setVolume", [100]);
-  post("playVideo");
-  setSnapshot({ ...snapshot, muted: false, prompt: false });
-}
-
-export function toggleShortMute() {
-  if (snapshot.muted || snapshot.prompt) unmuteFromGesture();
-  else {
-    sessionUnmuted = false;
-    writeWantSound(false);
-    post("mute");
-    setSnapshot({ ...snapshot, muted: true, prompt: false });
-  }
-}
-
-export function tapShort() {
-  noteUserGesture();
-  const id = snapshot.videoId;
-  if (!id || !frame) return;
-  if (!playing || snapshot.prompt || snapshot.muted) {
-    if (!playing) frame.src = embedUrl(id, !readWantSound());
-    if (readWantSound()) unmuteFromGesture();
-    else {
-      post("mute");
-      post("playVideo");
-    }
-    playing = true;
-    return;
-  }
-  post("pauseVideo");
-  playing = false;
-}
-
-export function armShortsFromGesture() {
-  noteUserGesture();
-  const id = primed?.[0]?.id;
-  if (!id) return;
-  if (isIOS() || !readWantSound()) {
-    ensureFrame(id, true);
-    if (readWantSound()) setSnapshot({ videoId: id, muted: true, prompt: true });
-    return;
-  }
-  sessionUnmuted = true;
-  if (!frame) ensureFrame(id, false);
-  else playShort(id);
 }
 
 export function takePrimedShorts() {
@@ -283,4 +37,87 @@ export function primeShorts() {
 export function resetPrime() {
   primed = null;
   primePromise = null;
+}
+
+type YTPlayer = {
+  playVideo: () => void;
+  pauseVideo: () => void;
+  mute: () => void;
+  unMute: () => void;
+  setVolume: (volume: number) => void;
+  cueVideoById: (id: string) => void;
+  getPlayerState: () => number;
+  getIframe: () => HTMLIFrameElement;
+  destroy: () => void;
+};
+
+type YTEvent = { data: number; target: YTPlayer };
+
+declare global {
+  interface Window {
+    YT?: {
+      Player: new (
+        element: HTMLElement,
+        options: {
+          videoId: string;
+          host?: string;
+          playerVars: Record<string, number | string>;
+          events: {
+            onReady: (event: { target: YTPlayer }) => void;
+            onStateChange: (event: YTEvent) => void;
+            onError: (event: YTEvent) => void;
+          };
+        },
+      ) => YTPlayer;
+      PlayerState: { PLAYING: number; PAUSED: number; BUFFERING: number; CUED: number; ENDED: number; UNSTARTED: number };
+    };
+    onYouTubeIframeAPIReady?: () => void;
+  }
+}
+
+let apiPromise: Promise<void> | null = null;
+
+export function loadYouTubeApi() {
+  if (typeof window === "undefined") return Promise.resolve();
+  if (window.YT?.Player) return Promise.resolve();
+  if (apiPromise) return apiPromise;
+  apiPromise = new Promise((resolve) => {
+    const previous = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => {
+      previous?.();
+      resolve();
+    };
+    if (!document.querySelector("script[src='https://www.youtube.com/iframe_api']")) {
+      const script = document.createElement("script");
+      script.src = "https://www.youtube.com/iframe_api";
+      document.head.appendChild(script);
+    }
+  });
+  return apiPromise;
+}
+
+export type ShortPlayerEvent =
+  | { id: string; type: "ready" }
+  | { id: string; type: "state"; state: number }
+  | { id: string; type: "error"; code: number }
+  | { id: string; type: "sound-blocked" };
+
+export type ShortPlayerHandle = {
+  play: () => void;
+  pause: () => void;
+  unmute: () => void;
+  mute: () => void;
+};
+
+const handles = new Map<string, ShortPlayerHandle>();
+
+export function shortPlayerHandle(id: string) {
+  return handles.get(id);
+}
+
+export function registerShortPlayer(id: string, handle: ShortPlayerHandle) {
+  handles.set(id, handle);
+  return () => {
+    if (handles.get(id) === handle) handles.delete(id);
+  };
 }

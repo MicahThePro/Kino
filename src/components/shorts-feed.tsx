@@ -7,6 +7,7 @@ import {
   ChevronUp,
   MessageCircle,
   MoreVertical,
+  Play,
   Share2,
   ThumbsDown,
   ThumbsUp,
@@ -14,18 +15,10 @@ import {
   VolumeX,
 } from "lucide-react";
 import { CommentsBody, CommentsSheet } from "@/components/comments-panel";
+import { ShortSlidePlayer } from "@/components/short-slide-player";
 import { readInterests } from "@/lib/interests";
-import {
-  getShortsSnapshot,
-  playShort,
-  preloadShort,
-  shortsPlayerHost,
-  subscribeShorts,
-  takePrimedShorts,
-  tapShort,
-  toggleShortMute,
-  unmuteFromGesture,
-} from "@/lib/shorts-player";
+import { readWantSound, writeWantSound } from "@/lib/playback";
+import { isIOS, shortPlayerHandle, takePrimedShorts, type ShortPlayerEvent } from "@/lib/shorts-player";
 import type { ShortsFeed } from "@/lib/youtube/shorts-feed";
 import type { VideoItem } from "@/lib/youtube/types";
 
@@ -105,9 +98,12 @@ function ActionButton({
 
 export function ShortsFeed() {
   const scroller = useRef<HTMLDivElement>(null);
-  const playerSlot = useRef<HTMLDivElement>(null);
   const paging = useRef(false);
-  const player = useSyncExternalStore(subscribeShorts, getShortsSnapshot, getShortsSnapshot);
+  const ios = useSyncExternalStore(() => () => undefined, isIOS, () => false);
+  const [wantSound, setWantSound] = useState(true);
+  const [soundOn, setSoundOn] = useState(false);
+  const [soundBlocked, setSoundBlocked] = useState(false);
+  const [ytState, setYtState] = useState<Record<string, number>>({});
   const [items, setItems] = useState<VideoItem[]>([]);
   const [active, setActive] = useState("");
   const [loading, setLoading] = useState(true);
@@ -139,12 +135,12 @@ export function ShortsFeed() {
     const observer = new IntersectionObserver(
       (entries) => {
         const best = entries
-          .filter((entry) => entry.isIntersecting && entry.intersectionRatio >= 0.65)
+          .filter((entry) => entry.isIntersecting && entry.intersectionRatio >= 0.75)
           .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
         const id = best?.target.getAttribute("data-short-id");
         if (id) setActive(id);
       },
-      { root, threshold: [0.65, 0.9] },
+      { root, threshold: [0.75, 0.95] },
     );
     slides.forEach((slide) => observer.observe(slide));
     return () => observer.disconnect();
@@ -164,42 +160,83 @@ export function ShortsFeed() {
   }, [items.length]);
 
   useEffect(() => {
-    const slot = playerSlot.current;
-    const node = shortsPlayerHost();
-    if (!slot || !node || node.parentElement === slot) return;
-    slot.appendChild(node);
-  });
+    setWantSound(readWantSound());
+    if (!isIOS() && readWantSound()) setSoundOn(true);
+  }, []);
 
   useEffect(() => {
-    if (!active) return;
-    playShort(active);
-    const next = items[activeIndex + 1];
-    if (next) preloadShort(next.id);
-  }, [active, activeIndex, items]);
-
-  useEffect(() => {
-    if (!player.prompt) return;
-    const once = (event: Event) => {
-      if (!event.isTrusted) return;
-      unmuteFromGesture();
-    };
-    const options = { capture: true, passive: true } as const;
-    window.addEventListener("pointerdown", once, options);
-    window.addEventListener("keydown", once, options);
-    window.addEventListener("touchstart", once, options);
-    window.addEventListener("wheel", once, options);
     const root = scroller.current;
-    root?.addEventListener("touchstart", once, { passive: true });
-    root?.addEventListener("scroll", once, { passive: true });
-    return () => {
-      window.removeEventListener("pointerdown", once, options);
-      window.removeEventListener("keydown", once, options);
-      window.removeEventListener("touchstart", once, options);
-      window.removeEventListener("wheel", once, options);
-      root?.removeEventListener("touchstart", once);
-      root?.removeEventListener("scroll", once);
+    if (!root) return;
+    const onEnd = () => {
+      const index = Math.round(root.scrollTop / (root.clientHeight || 1));
+      const id = itemsRef.current[index]?.id;
+      if (id) setActive(id);
     };
-  }, [player.prompt]);
+    root.addEventListener("scrollend", onEnd);
+    return () => root.removeEventListener("scrollend", onEnd);
+  }, [items.length]);
+
+  function skipShort(id: string) {
+    setItems((current) => {
+      const index = current.findIndex((item) => item.id === id);
+      if (index < 0) return current;
+      const next = current.filter((item) => item.id !== id);
+      const follow = next[Math.min(index, next.length - 1)];
+      if (follow && id === active) setActive(follow.id);
+      return next;
+    });
+  }
+
+  function onPlayerEvent(event: ShortPlayerEvent) {
+    if (event.type === "state") {
+      setYtState((current) => (current[event.id] === event.state ? current : { ...current, [event.id]: event.state }));
+      return;
+    }
+    if (event.type === "sound-blocked" && event.id === active) {
+      setSoundBlocked(true);
+      return;
+    }
+    if (event.type === "error" && (event.code === 100 || event.code === 101 || event.code === 150)) {
+      skipShort(event.id);
+    }
+  }
+
+  function onVideoTap() {
+    const handle = shortPlayerHandle(active);
+    if (!handle) return;
+    if (ios && wantSound && (!soundOn || soundBlocked)) {
+      setSoundOn(true);
+      setSoundBlocked(false);
+      setWantSound(true);
+      writeWantSound(true);
+      handle.unmute();
+      handle.play();
+      return;
+    }
+    const state = ytState[active];
+    if (state === 1 || state === 3) handle.pause();
+    else handle.play();
+  }
+
+  function onMute() {
+    const handle = shortPlayerHandle(active);
+    if (wantSound && !soundBlocked) {
+      setWantSound(false);
+      setSoundOn(false);
+      writeWantSound(false);
+      handle?.mute();
+      return;
+    }
+    setWantSound(true);
+    setSoundOn(true);
+    setSoundBlocked(false);
+    writeWantSound(true);
+    handle?.unmute();
+    handle?.play();
+  }
+
+  const audible = wantSound && !soundBlocked && (!ios || soundOn);
+  const showUnmute = ios && wantSound && (!soundOn || soundBlocked);
 
   useEffect(() => {
     const primed = takePrimedShorts();
@@ -400,48 +437,54 @@ export function ShortsFeed() {
             Backup Shorts. Not personalized.
           </p>
         ) : null}
-        <div
-          className="pointer-events-none absolute left-0 z-[1] flex h-full w-full items-end justify-center"
-          style={{ top: `${activeIndex * 100}%` }}
-        >
-          <div className="flex h-full min-w-0 items-end justify-center gap-3">
-            <div ref={playerSlot} className="relative h-full max-h-full min-h-0 w-[var(--short-w)] max-w-full shrink-0">
-            </div>
-            <div className="mb-4 hidden w-11 shrink-0 md:block" />
-          </div>
-        </div>
         {items.map((item, index) => {
           const playing = item.id === active;
+          const mounted = index >= activeIndex - 1 && index <= activeIndex + 2;
+          const state = ytState[item.id];
+          const showPlay = playing && (state === 2 || state === 5 || state === -1);
           const title = item.title && item.title !== "Short" ? item.title : "";
           const initial = (item.channelTitle || title || "?").slice(0, 1).toUpperCase();
           return (
             <section
               key={item.id}
               data-short-id={item.id}
+              data-yt-state={playing ? state ?? "" : undefined}
               className="pointer-events-none relative z-10 flex h-full w-full min-w-0 snap-start snap-always items-center justify-center overflow-hidden"
             >
               <div className="flex h-full max-h-full min-w-0 items-end justify-center gap-3">
                 <div className="relative h-full max-h-full min-h-0 w-[var(--short-w)] max-w-full shrink-0">
-                  <div className={`absolute inset-0 overflow-hidden ${playing ? "bg-transparent" : "bg-neutral-950"}`}>
-                    {playing ? (
-                      <button
-                        type="button"
-                        aria-label="Play or pause"
-                        onClick={() => tapShort()}
-                        className="pointer-events-auto absolute inset-0 z-0"
-                      />
-                    ) : null}
-                    {item.thumbnail && !playing ? (
+                  <div className="absolute inset-0 overflow-hidden bg-neutral-950">
+                    {item.thumbnail ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={item.thumbnail} alt="" className="absolute inset-0 h-full w-full object-cover" />
                     ) : null}
+                    {mounted ? (
+                      <ShortSlidePlayer
+                        videoId={item.id}
+                        active={playing}
+                        audible={playing && audible}
+                        onEvent={onPlayerEvent}
+                      />
+                    ) : null}
                     <button
                       type="button"
-                      onClick={() => toggleShortMute()}
-                      className="pointer-events-auto absolute top-3 right-3 z-10 grid size-10 place-items-center rounded-full bg-black/55 text-white"
-                      aria-label={player.muted ? "Unmute" : "Mute"}
+                      aria-label="Play or pause"
+                      onClick={onVideoTap}
+                      className="pointer-events-auto absolute inset-0 z-10 flex items-center justify-center"
                     >
-                      {player.muted || !playing ? <VolumeX className="size-5" /> : <Volume2 className="size-5" />}
+                      {showPlay ? (
+                        <span className="grid size-16 place-items-center rounded-full bg-black/45">
+                          <Play className="size-8 fill-white text-white" />
+                        </span>
+                      ) : null}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onMute}
+                      className="pointer-events-auto absolute top-3 right-3 z-20 grid size-10 place-items-center rounded-full bg-black/55 text-white"
+                      aria-label={audible ? "Mute" : "Unmute"}
+                    >
+                      {audible ? <Volume2 className="size-5" /> : <VolumeX className="size-5" />}
                     </button>
                     <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/85 via-black/35 to-transparent px-3 pt-16 pb-3 pr-16 md:pr-4">
                       <div className="pointer-events-auto flex items-center gap-2">
@@ -509,11 +552,11 @@ export function ShortsFeed() {
         </div>
       ) : null}
 
-      {player.prompt ? (
+      {showUnmute ? (
         <button
           type="button"
-          onClick={() => unmuteFromGesture()}
-          className="fixed top-1/2 left-1/2 z-[80] -translate-x-1/2 -translate-y-1/2 rounded-full bg-white px-4 py-2 text-sm font-bold text-black shadow-lg"
+          onClick={onVideoTap}
+          className="pointer-events-auto fixed top-1/2 left-1/2 z-[80] -translate-x-1/2 -translate-y-1/2 rounded-full bg-white px-4 py-2 text-sm font-bold text-black shadow-lg"
         >
           Tap to unmute
         </button>

@@ -137,6 +137,34 @@ async function searchSeed(seed: number, exclude: Set<string>, topics: string[] =
   };
 }
 
+async function keepEmbeddable(items: VideoItem[]) {
+  try {
+    const yt = await getInnertube();
+    const checked = await Promise.all(
+      items.map(async (item) => {
+        try {
+          const info = await Promise.race([
+            yt.getBasicInfo(item.id),
+            new Promise<null>((resolve) => setTimeout(() => resolve(null), 2500)),
+          ]);
+          const status = (info as { playability_status?: { status?: string; embeddable?: boolean } } | null)?.playability_status;
+          if (!status) return item;
+          if (status.status === "LOGIN_REQUIRED") return item;
+          if (status.embeddable === false) return null;
+          if (status.status === "UNPLAYABLE" || status.status === "ERROR") return null;
+          return item;
+        } catch {
+          return item;
+        }
+      }),
+    );
+    const kept = checked.filter((item): item is VideoItem => Boolean(item));
+    return kept.length > 0 ? kept : items;
+  } catch {
+    return items;
+  }
+}
+
 export async function getShortsFeed(options?: {
   seed?: number;
   exclude?: string[];
@@ -151,7 +179,7 @@ export async function getShortsFeed(options?: {
   try {
     if (after) {
       const reel = await reelFrom(after, exclude);
-      if (reel.length > 0) return { mode: "live", items: dedupeShorts(reel) };
+      if (reel.length > 0) return { mode: "live", items: await keepEmbeddable(dedupeShorts(reel)) };
       const fallback = await searchSeed(seed + exclude.size, exclude, topics);
       const fresh = fallback.items.filter((item) => item.id !== after && !exclude.has(item.id));
       if (fresh.length > 0) return { mode: fallback.mode, items: dedupeShorts(fresh), error: fallback.error };
@@ -162,7 +190,7 @@ export async function getShortsFeed(options?: {
     if (searched.items.length === 0) {
       return { mode: "demo", items: demoShortsFeed(), error: searched.error || "No Shorts returned" };
     }
-    return searched;
+    return { ...searched, items: await keepEmbeddable(searched.items) };
   } catch (error) {
     return {
       mode: "demo",
