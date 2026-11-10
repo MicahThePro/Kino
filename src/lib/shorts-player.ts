@@ -46,6 +46,7 @@ type YTPlayer = {
   unMute: () => void;
   setVolume: (volume: number) => void;
   cueVideoById: (id: string) => void;
+  loadVideoById: (id: string) => void;
   getPlayerState: () => number;
   getIframe: () => HTMLIFrameElement;
   destroy: () => void;
@@ -59,9 +60,9 @@ declare global {
       Player: new (
         element: HTMLElement,
         options: {
-          videoId: string;
+          videoId?: string;
           host?: string;
-          playerVars: Record<string, number | string>;
+          playerVars?: Record<string, number | string>;
           events: {
             onReady: (event: { target: YTPlayer }) => void;
             onStateChange: (event: YTEvent) => void;
