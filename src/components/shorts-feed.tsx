@@ -439,9 +439,8 @@ export function ShortsFeed() {
         ) : null}
         {items.map((item, index) => {
           const playing = item.id === active;
-          const mounted = index >= activeIndex - 1 && index <= activeIndex + 2;
           const state = ytState[item.id];
-          const showPlay = playing && (state === 2 || state === 5 || state === -1);
+          const showPlay = playing && state === 2;
           const title = item.title && item.title !== "Short" ? item.title : "";
           const initial = (item.channelTitle || title || "?").slice(0, 1).toUpperCase();
           return (
@@ -458,11 +457,11 @@ export function ShortsFeed() {
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={item.thumbnail} alt="" className="absolute inset-0 h-full w-full object-cover" />
                     ) : null}
-                    {mounted ? (
+                    {playing ? (
                       <ShortSlidePlayer
                         videoId={item.id}
-                        active={playing}
-                        audible={playing && audible}
+                        active
+                        audible={audible}
                         onEvent={onPlayerEvent}
                       />
                     ) : null}

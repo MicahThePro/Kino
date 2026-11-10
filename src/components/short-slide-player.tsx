@@ -9,6 +9,25 @@ import {
 
 const ALLOW = "autoplay; encrypted-media; picture-in-picture; fullscreen";
 
+function autoplaySrc(videoId: string) {
+  const params = new URLSearchParams({
+    autoplay: "1",
+    mute: "1",
+    playsinline: "1",
+    controls: "0",
+    rel: "0",
+    modestbranding: "1",
+    enablejsapi: "1",
+    iv_load_policy: "3",
+    fs: "0",
+    disablekb: "1",
+    loop: "1",
+    playlist: videoId,
+    origin: window.location.origin,
+  });
+  return `https://www.youtube.com/embed/${encodeURIComponent(videoId)}?${params}`;
+}
+
 export function ShortSlidePlayer({
   videoId,
   active,
@@ -21,82 +40,78 @@ export function ShortSlidePlayer({
   onEvent: (event: ShortPlayerEvent) => void;
 }) {
   const shell = useRef<HTMLDivElement>(null);
-  const host = useRef<HTMLDivElement>(null);
   const player = useRef<YTPlayer | null>(null);
   const ready = useRef(false);
   const activeRef = useRef(active);
   const audibleRef = useRef(audible);
   const onEventRef = useRef(onEvent);
   const unmuteAt = useRef(0);
-  const kicked = useRef(false);
   const blocked = useRef(false);
+  const retried = useRef(false);
   const instance = useRef(`p${Math.random().toString(36).slice(2, 10)}`);
   activeRef.current = active;
   audibleRef.current = audible;
   onEventRef.current = onEvent;
 
   useEffect(() => {
-    const element = host.current;
-    if (!element || !shell.current) return;
+    const shellNode = shell.current;
+    if (!shellNode) return;
     let destroyed = false;
-    shell.current.dataset.playerInstance = instance.current;
-    shell.current.dataset.reloaded = "0";
+    shellNode.dataset.playerInstance = instance.current;
+    shellNode.dataset.reloaded = "0";
+    shellNode.dataset.autoplay = "1";
+    const iframe = document.createElement("iframe");
+    iframe.src = autoplaySrc(videoId);
+    iframe.title = "Short";
+    iframe.allow = ALLOW;
+    iframe.setAttribute("playsinline", "");
+    iframe.setAttribute("webkit-playsinline", "");
+    iframe.setAttribute("allowfullscreen", "");
+    iframe.style.cssText = "position:absolute;inset:0;width:100%;height:100%;border:0;";
+    shellNode.appendChild(iframe);
+    shellNode.dataset.initialSrc = iframe.src;
+
     loadYouTubeApi().then(() => {
-      if (destroyed || !host.current || !window.YT?.Player) return;
-      player.current = new window.YT.Player(host.current, {
-        videoId,
-        host: "https://www.youtube.com",
-        playerVars: {
-          playsinline: 1,
-          mute: 1,
-          controls: 0,
-          rel: 0,
-          modestbranding: 1,
-          autoplay: 0,
-          enablejsapi: 1,
-          origin: window.location.origin,
-          iv_load_policy: 3,
-          fs: 0,
-          disablekb: 1,
-        },
+      if (destroyed || !window.YT?.Player || !iframe.isConnected) return;
+      player.current = new window.YT.Player(iframe, {
         events: {
           onReady: (event) => {
             if (destroyed) return;
             ready.current = true;
-            const iframe = event.target.getIframe?.();
-            if (iframe && shell.current) {
-              iframe.setAttribute("allow", ALLOW);
-              iframe.setAttribute("playsinline", "");
-              iframe.setAttribute("webkit-playsinline", "");
-              shell.current.dataset.initialSrc = iframe.src;
-            }
             event.target.mute();
             if (activeRef.current) event.target.playVideo();
-            else event.target.cueVideoById(videoId);
+            const frame = event.target.getIframe?.();
+            if (frame && shell.current) {
+              frame.setAttribute("allow", ALLOW);
+              frame.setAttribute("playsinline", "");
+              const writes = frame.src !== shell.current.dataset.initialSrc ? "1" : "0";
+              shell.current.dataset.srcWrites = writes;
+            }
             if (shell.current) shell.current.dataset.ytState = String(event.target.getPlayerState?.() ?? -1);
             onEventRef.current({ id: videoId, type: "ready" });
           },
           onStateChange: (event) => {
             if (destroyed) return;
             const state = Number(event.data);
-            const iframe = event.target.getIframe?.();
-            const initial = shell.current?.dataset.initialSrc;
-            if (shell.current && initial && iframe?.src && iframe.src !== initial) {
-              shell.current.dataset.reloaded = "1";
+            const frame = event.target.getIframe?.();
+            if (shell.current && frame?.src && shell.current.dataset.initialSrc && frame.src !== shell.current.dataset.initialSrc) {
+              const writes = Number(shell.current.dataset.srcWrites || "0") + 1;
+              shell.current.dataset.srcWrites = String(writes);
+              shell.current.dataset.initialSrc = frame.src;
+              if (writes > 1) shell.current.dataset.reloaded = "1";
             }
             if (shell.current) shell.current.dataset.ytState = String(state);
             onEventRef.current({ id: videoId, type: "state", state });
-            if (state === 1 || state === 3) kicked.current = false;
-            if ((state === 5 || state === -1) && activeRef.current && !kicked.current) {
-              kicked.current = true;
-              event.target.playVideo();
+            if ((state === -1 || state === 5) && activeRef.current && ready.current && !retried.current) {
+              retried.current = true;
+              event.target.mute();
+              event.target.loadVideoById(videoId);
+              return;
             }
-            if (state === 1) {
-              if (activeRef.current && audibleRef.current && !blocked.current) {
-                unmuteAt.current = Date.now();
-                event.target.unMute();
-                event.target.setVolume(100);
-              }
+            if (state === 1 && activeRef.current && audibleRef.current && !blocked.current) {
+              unmuteAt.current = Date.now();
+              event.target.unMute();
+              event.target.setVolume(100);
               return;
             }
             if (
@@ -116,31 +131,23 @@ export function ShortSlidePlayer({
             if (destroyed) return;
             const code = Number(event.data);
             if (shell.current) shell.current.dataset.ytError = String(code);
-            const log = document.body.dataset.ytErrors || "";
-            document.body.dataset.ytErrors = `${log} ${videoId}:${code}`.trim().slice(-400);
             onEventRef.current({ id: videoId, type: "error", code });
           },
         },
       });
     });
+
     return () => {
       destroyed = true;
       ready.current = false;
       try {
         player.current?.destroy();
       } catch {
-        /* already gone */
+        iframe.remove();
       }
       player.current = null;
     };
   }, [videoId]);
-
-  useEffect(() => {
-    const target = player.current;
-    if (!ready.current || !target?.playVideo) return;
-    if (active) target.playVideo();
-    else target.pauseVideo();
-  }, [active]);
 
   useEffect(() => {
     audibleRef.current = audible;
@@ -159,7 +166,10 @@ export function ShortSlidePlayer({
 
   useEffect(() => {
     return registerShortPlayer(videoId, {
-      play: () => player.current?.playVideo(),
+      play: () => {
+        player.current?.mute();
+        player.current?.loadVideoById(videoId);
+      },
       pause: () => player.current?.pauseVideo(),
       unmute: () => {
         blocked.current = false;
@@ -178,10 +188,9 @@ export function ShortSlidePlayer({
       data-short-player={videoId}
       data-player-instance={instance.current}
       data-reloaded="0"
+      data-autoplay="1"
       className="absolute inset-0 z-0"
-    >
-      <div ref={host} className="h-full w-full" />
-    </div>
+    />
   );
 }
 
@@ -192,6 +201,7 @@ type YTPlayer = {
   unMute: () => void;
   setVolume: (volume: number) => void;
   cueVideoById: (id: string) => void;
+  loadVideoById: (id: string) => void;
   getPlayerState: () => number;
   getIframe: () => HTMLIFrameElement;
   destroy: () => void;
