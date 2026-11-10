@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { House, Play } from "lucide-react";
 import { SiteHeader } from "@/components/site-header";
-import { armShortsFromGesture, primeShorts, resetPrime } from "@/lib/shorts-player";
+import { primeShorts, resetPrime } from "@/lib/shorts-player";
 import { INTERESTS_EVENT } from "@/lib/interests";
 import { noteUserGesture } from "@/lib/playback";
 import { cn } from "@/lib/utils";
@@ -33,14 +33,8 @@ function NavLink({
     <Link
       href={href}
       aria-current={active ? "page" : undefined}
-      onPointerDown={() => {
-        noteUserGesture();
-        if (href === "/shorts") armShortsFromGesture();
-      }}
-      onClick={() => {
-        noteUserGesture();
-        if (href === "/shorts") armShortsFromGesture();
-      }}
+      onPointerDown={() => noteUserGesture()}
+      onClick={() => noteUserGesture()}
       className={cn(
         "flex flex-col items-center gap-1 rounded-xl px-2 py-2 text-[11px] font-medium transition-colors",
         compact && "min-h-12 flex-1 py-2",
