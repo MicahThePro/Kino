@@ -22,6 +22,7 @@ import {
   shortsPlayerHost,
   subscribeShorts,
   takePrimedShorts,
+  tapShort,
   toggleShortMute,
   unmuteFromGesture,
 } from "@/lib/shorts-player";
@@ -148,6 +149,19 @@ export function ShortsFeed() {
     slides.forEach((slide) => observer.observe(slide));
     return () => observer.disconnect();
   }, [items]);
+
+  useEffect(() => {
+    const root = scroller.current;
+    if (!root) return;
+    const apply = () => {
+      const width = Math.min(root.clientWidth, Math.round(root.clientHeight * 9 / 16));
+      root.style.setProperty("--short-w", `${Math.max(width, 1)}px`);
+    };
+    apply();
+    const observer = new ResizeObserver(apply);
+    observer.observe(root);
+    return () => observer.disconnect();
+  }, [items.length]);
 
   useEffect(() => {
     const slot = playerSlot.current;
@@ -391,7 +405,7 @@ export function ShortsFeed() {
           style={{ top: `${activeIndex * 100}%` }}
         >
           <div className="flex h-full min-w-0 items-end justify-center gap-3">
-            <div ref={playerSlot} className="relative h-full max-h-full min-h-0 w-auto max-w-full" style={{ aspectRatio: "9 / 16" }}>
+            <div ref={playerSlot} className="relative h-full max-h-full min-h-0 w-[var(--short-w)] max-w-full shrink-0">
             </div>
             <div className="mb-4 hidden w-11 shrink-0 md:block" />
           </div>
@@ -404,11 +418,19 @@ export function ShortsFeed() {
             <section
               key={item.id}
               data-short-id={item.id}
-              className="relative z-10 flex h-full w-full min-w-0 snap-start snap-always items-center justify-center overflow-hidden"
+              className="pointer-events-none relative z-10 flex h-full w-full min-w-0 snap-start snap-always items-center justify-center overflow-hidden"
             >
               <div className="flex h-full max-h-full min-w-0 items-end justify-center gap-3">
-                <div className="relative h-full max-h-full min-h-0 w-auto max-w-full min-w-0" style={{ aspectRatio: "9 / 16" }}>
+                <div className="relative h-full max-h-full min-h-0 w-[var(--short-w)] max-w-full shrink-0">
                   <div className={`absolute inset-0 overflow-hidden ${playing ? "bg-transparent" : "bg-neutral-950"}`}>
+                    {playing ? (
+                      <button
+                        type="button"
+                        aria-label="Play or pause"
+                        onClick={() => tapShort()}
+                        className="pointer-events-auto absolute inset-0 z-0"
+                      />
+                    ) : null}
                     {item.thumbnail && !playing ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={item.thumbnail} alt="" className="absolute inset-0 h-full w-full object-cover" />
@@ -416,7 +438,7 @@ export function ShortsFeed() {
                     <button
                       type="button"
                       onClick={() => toggleShortMute()}
-                      className="absolute top-3 right-3 z-10 grid size-10 place-items-center rounded-full bg-black/55 text-white"
+                      className="pointer-events-auto absolute top-3 right-3 z-10 grid size-10 place-items-center rounded-full bg-black/55 text-white"
                       aria-label={player.muted ? "Unmute" : "Mute"}
                     >
                       {player.muted || !playing ? <VolumeX className="size-5" /> : <Volume2 className="size-5" />}
@@ -451,9 +473,9 @@ export function ShortsFeed() {
                     </div>
                   </div>
                 </div>
-                <div className="mb-4 hidden md:block">{rail(item, "")}</div>
+                <div className="pointer-events-auto mb-4 hidden md:block">{rail(item, "")}</div>
               </div>
-              {rail(item, "absolute right-3 bottom-36 z-10 md:hidden")}
+              {rail(item, "pointer-events-auto absolute right-3 bottom-36 z-10 md:hidden")}
             </section>
           );
         })}

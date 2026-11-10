@@ -19,6 +19,7 @@ let sessionUnmuted = false;
 let heardSound = false;
 let playing = false;
 let fallbackTimer = 0;
+let mutedRestarts = 0;
 
 function emit() {
   listeners.forEach((listener) => listener());
@@ -71,6 +72,12 @@ function listen() {
   frame?.contentWindow?.postMessage(JSON.stringify({ event: "listening", id: 1, channel: "widget" }), "*");
 }
 
+function isIOS() {
+  if (typeof navigator === "undefined") return false;
+  const agent = navigator.userAgent || "";
+  return /iPhone|iPad|iPod/i.test(agent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+}
+
 function shouldUnmute() {
   if (!readWantSound()) return false;
   if (snapshot.prompt && !sessionUnmuted) return false;
@@ -90,6 +97,7 @@ function onMessage(event: MessageEvent) {
   if (payload.event === "onStateChange" && state === 0) post("playVideo");
   if (state === 1) {
     playing = true;
+    mutedRestarts = 0;
     window.clearTimeout(fallbackTimer);
   }
   if (state === 1 && info && typeof info === "object" && typeof info.muted === "boolean") {
@@ -113,8 +121,9 @@ function ensureFrame(id: string, muted: boolean) {
   if (!frame) {
     frame = document.createElement("iframe");
     frame.allow = "autoplay; encrypted-media; picture-in-picture";
-    frame.setAttribute("playsinline", "true");
-    frame.setAttribute("allowfullscreen", "true");
+    frame.setAttribute("playsinline", "");
+    frame.setAttribute("webkit-playsinline", "");
+    frame.setAttribute("allowfullscreen", "");
     frame.title = "Short";
     frame.style.cssText = "position:absolute;inset:0;width:100%;height:100%;border:0;pointer-events:none;";
     host.appendChild(frame);
@@ -125,18 +134,21 @@ function ensureFrame(id: string, muted: boolean) {
       post(shouldUnmute() ? "unMute" : "mute");
       window.clearTimeout(fallbackTimer);
       fallbackTimer = window.setTimeout(() => {
-        if (heardSound || !readWantSound()) return;
-        if (userActivated()) {
-          post("unMute");
-          post("setVolume", [100]);
-          post("playVideo");
+        if (playing) {
+          if (readWantSound() && !heardSound) setSnapshot({ ...snapshot, muted: true, prompt: true });
           return;
+        }
+        const current = snapshot.videoId;
+        if (frame && current && mutedRestarts < 1) {
+          mutedRestarts += 1;
+          playing = false;
+          frame.src = embedUrl(current, true);
         }
         post("mute");
         post("playVideo");
         sessionUnmuted = false;
-        setSnapshot({ ...snapshot, muted: true, prompt: true });
-      }, 1200);
+        setSnapshot({ ...snapshot, muted: true, prompt: readWantSound() });
+      }, 1000);
     });
   }
   host.dataset.videoId = id;
@@ -158,14 +170,17 @@ export function playShort(id: string) {
   if (!id || typeof window === "undefined") return;
   const want = readWantSound();
   if (!frame) {
-    if (want && userActivated()) sessionUnmuted = true;
-    ensureFrame(id, !want);
+    const muted = isIOS() || !want;
+    if (!muted && want && userActivated()) sessionUnmuted = true;
+    ensureFrame(id, muted);
+    if (muted && want) setSnapshot({ videoId: id, muted: true, prompt: true });
     return;
   }
   const unmute = shouldUnmute();
   if (snapshot.videoId !== id) {
     playing = false;
-    post("loadVideoById", [{ videoId: id, startSeconds: 0 }]);
+    if (isIOS()) frame.src = embedUrl(id, !unmute);
+    else post("loadVideoById", [{ videoId: id, startSeconds: 0 }]);
   }
   post("playVideo");
   post(unmute ? "unMute" : "mute");
@@ -209,12 +224,31 @@ export function toggleShortMute() {
   }
 }
 
+export function tapShort() {
+  noteUserGesture();
+  const id = snapshot.videoId;
+  if (!id || !frame) return;
+  if (!playing || snapshot.prompt || snapshot.muted) {
+    if (!playing) frame.src = embedUrl(id, !readWantSound());
+    if (readWantSound()) unmuteFromGesture();
+    else {
+      post("mute");
+      post("playVideo");
+    }
+    playing = true;
+    return;
+  }
+  post("pauseVideo");
+  playing = false;
+}
+
 export function armShortsFromGesture() {
   noteUserGesture();
   const id = primed?.[0]?.id;
   if (!id) return;
-  if (!readWantSound()) {
+  if (isIOS() || !readWantSound()) {
     ensureFrame(id, true);
+    if (readWantSound()) setSnapshot({ videoId: id, muted: true, prompt: true });
     return;
   }
   sessionUnmuted = true;
